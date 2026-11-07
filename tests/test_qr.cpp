@@ -291,6 +291,97 @@ void testWifi()
     expect(!splitWifiInput(" x", ssid, password), "wifi: leading space, no SSID");
 }
 
+// ---- saved Wi-Fi profiles ----------------------------------------------------
+
+void testSavedWifiProfiles()
+{
+    using namespace ra9fael::qr;
+
+    // A personal profile as Windows writes it (v1 schema). The protected blob
+    // is what an unelevated read would give if the key were refused.
+    const std::string wpa2Xml =
+        "<?xml version=\"1.0\"?>\n"
+        "<WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">\n"
+        "\t<name>MyNet</name>\n"
+        "\t<SSIDConfig><SSID><hex>4D794E6574</hex><name>MyNet</name></SSID></SSIDConfig>\n"
+        "\t<connectionType>ESS</connectionType>\n"
+        "\t<MSM><security><authEncryption><authentication>WPA2PSK</authentication>\n"
+        "\t\t<encryption>AES</encryption><useOneX>false</useOneX></authEncryption>\n"
+        "\t\t<sharedKey><keyType>passPhrase</keyType><protected>false</protected>\n"
+        "\t\t<keyMaterial>s3cret phrase</keyMaterial></sharedKey>\n"
+        "\t</security></MSM>\n"
+        "</WLANProfile>\n";
+    const WifiProfile wpa2 = parseWifiProfile(wpa2Xml);
+    expectEq(wpa2.ssid, "MyNet", "profile: the SSID comes from <SSID>");
+    expectEq(wpa2.authText, "WPA2PSK", "profile: the authentication element");
+    expectEq(wpa2.key, "s3cret phrase", "profile: the plaintext key");
+    expect(!wpa2.keyProtected, "profile: protected=false");
+    expect(!wpa2.oneX, "profile: useOneX=false");
+    expect(wifiShare(wpa2) == WifiShare::Ready, "profile: WPA2 personal is shareable");
+    expectEq(wifiPayloadFor(wpa2), "WIFI:T:WPA;S:MyNet;P:s3cret phrase;;",
+             "profile: a space in the key is not escaped, the payload is WPA");
+    expectEq(wifiAuthToken(wpa2), "WPA", "profile: WPA2 reads as the WPA token");
+
+    // WPA3-SAE is still the WPA token: the QR convention has no WPA3 one.
+    WifiProfile wpa3 = wpa2;
+    wpa3.authText = "WPA3SAE";
+    expectEq(wifiAuthToken(wpa3), "WPA", "profile: WPA3-SAE is the WPA token");
+    expect(wifiShare(wpa3) == WifiShare::Ready, "profile: WPA3 personal is shareable");
+
+    // WEP keeps its own token.
+    WifiProfile wep = wpa2;
+    wep.authText = "WEP";
+    expectEq(wifiAuthToken(wep), "WEP", "profile: WEP keeps its token");
+    expectEq(wifiPayloadFor(wep), "WIFI:T:WEP;S:MyNet;P:s3cret phrase;;", "profile: WEP payload");
+
+    // An open network: no <sharedKey> at all, T:nopass, no P segment.
+    const std::string openXml =
+        "<WLANProfile><name>Cafe</name><SSIDConfig><SSID><name>Cafe</name></SSID></SSIDConfig>"
+        "<MSM><security><authEncryption><authentication>open</authentication>"
+        "<encryption>none</encryption><useOneX>false</useOneX></authEncryption>"
+        "</security></MSM></WLANProfile>";
+    const WifiProfile open = parseWifiProfile(openXml);
+    expectEq(open.ssid, "Cafe", "profile: open SSID");
+    expect(!open.keyPresent, "profile: an open network has no sharedKey");
+    expect(wifiShare(open) == WifiShare::Open, "profile: open is shareable as nopass");
+    expectEq(wifiPayloadFor(open), "WIFI:T:nopass;S:Cafe;;", "profile: nopass payload");
+
+    // A refused key: the blob is not a passphrase, and the row says so.
+    WifiProfile refused = wpa2;
+    refused.keyProtected = true;
+    refused.key.clear();
+    expect(wifiShare(refused) == WifiShare::NeedsKey, "profile: a protected key is not shareable");
+    expect(wifiPayloadFor(refused).empty(), "profile: no payload without a key");
+
+    // 802.1X has no shared passphrase at all.
+    WifiProfile enterprise = wpa2;
+    enterprise.oneX = true;
+    expectEq(wifiAuthToken(enterprise), "enterprise", "profile: useOneX is enterprise");
+    expect(wifiShare(enterprise) == WifiShare::Enterprise, "profile: enterprise is not shareable");
+    expect(wifiPayloadFor(enterprise).empty(), "profile: an enterprise network has no payload");
+
+    // 禁九天 in UTF-8: the hex-only form and the entity form both decode.
+    const std::string hexOnly =
+        "<WLANProfile><name>p</name><SSIDConfig><SSID><hex>E7A681E4B99DE5A4A9</hex></SSID></SSIDConfig>"
+        "<MSM><security><authEncryption><authentication>WPA2PSK</authentication></authEncryption>"
+        "<sharedKey><protected>true</protected><keyMaterial>00</keyMaterial></sharedKey>"
+        "</security></MSM></WLANProfile>";
+    expectEq(parseWifiProfile(hexOnly).ssid, "禁九天", "profile: hex SSID decoded as UTF-8");
+    expectEq(parseWifiProfile("<SSID><name>a&amp;b</name></SSID>").ssid, "a&b",
+             "profile: entities decoded in the SSID");
+
+    // A hinted row's key is not a passphrase even when protected is absent.
+    WifiProfile noKey = wpa2;
+    noKey.key.clear();
+    expect(wifiShare(noKey) == WifiShare::NeedsKey, "profile: an empty key is not shareable");
+
+    // The filter is a case-insensitive substring, and empty matches all.
+    expect(ssidMatches("MyNet", ""), "filter: empty matches");
+    expect(ssidMatches("MyNet", "myn"), "filter: case-insensitive substring");
+    expect(ssidMatches("MyNet", "net"), "filter: anywhere in the SSID");
+    expect(!ssidMatches("MyNet", "cafe"), "filter: no match");
+}
+
 // ---- settings ----------------------------------------------------------------
 
 void testSettings()
@@ -445,6 +536,7 @@ int main()
     testFormatAndVersion();
     testCapacityAndSizes();
     testWifi();
+    testSavedWifiProfiles();
     testSettings();
     testSaveNames();
     testClassify();

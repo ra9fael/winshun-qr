@@ -5,8 +5,8 @@
   "name": {"zh": "二维码", "en": "QR code"},
   "version": "0.1.0",
   "description": {
-    "zh": "文字、链接或剪贴板内容生成二维码：Enter 复制图片，Ctrl+Enter 预览，Shift+Enter 存 PNG；qrwifi 生成扫码即连的 Wi-Fi 二维码",
-    "en": "Turn text, a link or the clipboard into a QR code: Enter copies the image, Ctrl+Enter previews, Shift+Enter saves a PNG; qrwifi builds a scan-to-join Wi-Fi code"
+    "zh": "文字、链接或剪贴板内容生成二维码：Enter 复制图片，Ctrl+Enter 预览，Shift+Enter 存 PNG；qrwifi 直接列出连接过的 Wi-Fi 生成扫码即连的二维码",
+    "en": "Turn text, a link or the clipboard into a QR code: Enter copies the image, Ctrl+Enter previews, Shift+Enter saves a PNG; qrwifi lists the Wi-Fi networks you have joined and builds a scan-to-join code"
   },
   "author": "ra9fael",
   "homepage": "https://github.com/ra9fael/winshun-qr",
@@ -48,14 +48,14 @@
       "id": "qrwifi",
       "keyword": ["qrwifi"],
       "title": {"zh": "Wi-Fi 二维码", "en": "Wi-Fi QR code"},
-      "hint": {"zh": "SSID 密码；密码留空生成开放网络的码", "en": "SSID password; an empty password means an open network"},
+      "hint": {"zh": "留空列出连接过的 Wi-Fi；输入可筛选，或直接写 SSID 密码", "en": "empty lists joined networks; type to filter, or write SSID password"},
       "actions": [
         {"id": "copyImage", "title": {"zh": "复制图片", "en": "Copy image"}, "key": "Enter"},
         {"id": "preview", "title": {"zh": "预览", "en": "Preview"}, "key": "Ctrl+Enter"},
         {"id": "savePng", "title": {"zh": "保存 PNG", "en": "Save PNG"}, "key": "Shift+Enter"}
       ],
       "ai": {
-        "description": "Generate a scan-to-join Wi-Fi QR code from \"SSID password\" (empty password = open network). The password is not stored anywhere; only the image is produced."
+        "description": "Generate a scan-to-join Wi-Fi QR code. With no text, list the networks this machine has joined (their saved profiles, passphrase included); typing filters that list, and text that matches no saved network is read as \"SSID password\" (empty password = open network). Networks Windows cannot share (802.1X, an unreadable key) are listed as unavailable. The password is not stored anywhere; only the image is produced."
       }
     }
   ],

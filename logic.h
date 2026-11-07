@@ -138,23 +138,26 @@ inline bool containsWep(const std::string& text)
     return false;
 }
 
-inline std::string wifiPayload(const std::string& ssid, const std::string& password)
+// The same payload with the authentication token already decided: a saved
+// profile's XML says what the network really is, so nothing has to be guessed
+// from the passphrase.
+inline std::string wifiPayloadWith(const std::string& ssid, const std::string& password,
+                                   const std::string& token)
 {
-    std::string out = "WIFI:T:";
-    if (password.empty())
-        out += "nopass";
-    else if (containsWep(password))
-        out += "WEP";
-    else
-        out += "WPA";
-    out += ";S:";
-    out += escapeWifi(ssid);
-    if (!password.empty()) {
+    std::string out = "WIFI:T:" + token + ";S:" + escapeWifi(ssid);
+    if (!password.empty() && token != "nopass") {
         out += ";P:";
         out += escapeWifi(password);
     }
     out += ";;";
     return out;
+}
+
+inline std::string wifiPayload(const std::string& ssid, const std::string& password)
+{
+    if (password.empty())
+        return wifiPayloadWith(ssid, "", "nopass");
+    return wifiPayloadWith(ssid, password, containsWep(password) ? "WEP" : "WPA");
 }
 
 // "SSID 密码" splits at the first space; the password may itself contain
@@ -170,6 +173,265 @@ inline bool splitWifiInput(const std::string& input, std::string& ssid, std::str
         password = input.substr(space + 1);
     }
     return !ssid.empty();
+}
+
+// ---- saved Wi-Fi profiles ----------------------------------------------------
+//
+// Windows keeps every network the user has joined as a profile; its XML names
+// the SSID, the authentication and (for a personal network) the passphrase.
+// native.h collects the XMLs, the rules below decide what a QR code can carry,
+// so the unit tests need no wireless adapter.
+
+struct WifiProfile {
+    std::string ssid;
+    std::string authText; // raw <authentication>: WPA2PSK, WPA3SAE, open, …
+    std::string key;      // plaintext keyMaterial; empty when protected
+    bool keyPresent = false;   // a <sharedKey> section exists
+    bool keyProtected = false; // the key came back as an encrypted blob
+    bool oneX = false;         // 802.1X: no shared passphrase at all
+    bool connected = false;    // this SSID is the current connection
+};
+
+// The text of the first <tag>…</tag>, entities decoded; empty when the tag is
+// absent or self-closing. The element name must match whole, so <name> does
+// not match <nameX>; xmlns attributes are ignored.
+inline std::string xmlDecode(const std::string& text);
+
+inline void appendXmlUtf8(std::string& out, unsigned cp)
+{
+    if (cp < 0x80)
+        out += static_cast<char>(cp);
+    else if (cp < 0x800) {
+        out += static_cast<char>(0xC0 | (cp >> 6));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+        out += static_cast<char>(0xE0 | (cp >> 12));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else {
+        out += static_cast<char>(0xF0 | (cp >> 18));
+        out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+}
+
+inline bool xmlHexDigits(const std::string& digits, bool hex)
+{
+    if (digits.empty())
+        return false;
+    for (const char c : digits) {
+        const bool ok = hex ? ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))
+                            : (c >= '0' && c <= '9');
+        if (!ok)
+            return false;
+    }
+    return true;
+}
+
+inline std::string xmlDecode(const std::string& text)
+{
+    std::string out;
+    out.reserve(text.size());
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if (text[i] != '&') {
+            out += text[i];
+            continue;
+        }
+        const std::size_t semi = text.find(';', i + 1);
+        if (semi == std::string::npos || semi - i > 10) { // a bare &, not an entity
+            out += text[i];
+            continue;
+        }
+        const std::string name = text.substr(i + 1, semi - i - 1);
+        bool consumed = true;
+        if (name == "amp")
+            out += '&';
+        else if (name == "lt")
+            out += '<';
+        else if (name == "gt")
+            out += '>';
+        else if (name == "quot")
+            out += '"';
+        else if (name == "apos")
+            out += '\'';
+        else if (name.size() > 1 && name[0] == '#') {
+            const bool hex = name[1] == 'x' || name[1] == 'X';
+            const std::string digits = name.substr(hex ? 2 : 1);
+            if (xmlHexDigits(digits, hex)) {
+                unsigned long cp = 0;
+                try {
+                    cp = std::stoul(digits, nullptr, hex ? 16 : 10);
+                } catch (...) {
+                    consumed = false;
+                }
+                if (consumed)
+                    appendXmlUtf8(out, static_cast<unsigned>(cp));
+            } else
+                consumed = false;
+        } else
+            consumed = false;
+        if (!consumed) {
+            out += text[i];
+            continue;
+        }
+        i = semi;
+    }
+    return out;
+}
+
+inline std::string xmlText(const std::string& xml, const std::string& tag)
+{
+    const auto isSpace = [](char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
+    for (std::size_t at = xml.find('<'); at != std::string::npos; at = xml.find('<', at + 1)) {
+        if (at + 1 + tag.size() >= xml.size())
+            return {};
+        if (xml.compare(at + 1, tag.size(), tag) != 0)
+            continue;
+        const char after = xml[at + 1 + tag.size()];
+        if (!(after == '>' || isSpace(after) || after == '/'))
+            continue;
+        const std::size_t open = xml.find('>', at);
+        if (open == std::string::npos)
+            return {};
+        if (xml[open - 1] == '/')
+            return {}; // <tag/>
+        const std::size_t close = xml.find("</" + tag, open + 1);
+        if (close == std::string::npos)
+            return {};
+        return xmlDecode(xml.substr(open + 1, close - open - 1));
+    }
+    return {};
+}
+
+// <hex>4D794E6574</hex> to its bytes; an odd length or a non-hex character
+// yields "".
+inline std::string hexToBytes(const std::string& hex)
+{
+    if (hex.empty() || hex.size() % 2 != 0)
+        return {};
+    std::string out;
+    out.reserve(hex.size() / 2);
+    for (std::size_t i = 0; i < hex.size(); i += 2) {
+        int value = 0;
+        for (int k = 0; k < 2; ++k) {
+            const char c = hex[i + k];
+            value <<= 4;
+            if (c >= '0' && c <= '9')
+                value |= c - '0';
+            else if (c >= 'a' && c <= 'f')
+                value |= c - 'a' + 10;
+            else if (c >= 'A' && c <= 'F')
+                value |= c - 'A' + 10;
+            else
+                return {};
+        }
+        out += static_cast<char>(value);
+    }
+    return out;
+}
+
+// A profile XML to the fields a QR code needs. The SSID element carries either
+// <name> or <hex>; the document's first <name> is the profile's own name, so
+// read inside <SSID> for the network's.
+inline WifiProfile parseWifiProfile(const std::string& xml)
+{
+    WifiProfile p;
+    p.authText = xmlText(xml, "authentication");
+    const std::string oneX = xmlText(xml, "useOneX");
+    p.oneX = oneX == "true" || oneX == "1";
+    p.keyPresent = xml.find("<sharedKey") != std::string::npos;
+    p.key = xmlText(xml, "keyMaterial");
+    const std::string prot = xmlText(xml, "protected");
+    p.keyProtected = prot == "true" || prot == "1";
+    if (p.keyProtected)
+        p.key.clear(); // the blob is not a passphrase
+
+    const std::size_t at = xml.find("<SSID>");
+    if (at != std::string::npos) {
+        const std::size_t end = xml.find("</SSID>", at);
+        const std::string block = end == std::string::npos ? xml.substr(at) : xml.substr(at, end - at);
+        p.ssid = xmlText(block, "name");
+        if (p.ssid.empty())
+            p.ssid = hexToBytes(xmlText(block, "hex"));
+    }
+    return p;
+}
+
+inline std::string upperText(const std::string& text)
+{
+    std::string out;
+    out.reserve(text.size());
+    for (const char c : text)
+        out += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return out;
+}
+
+// The payload's T value. WPA/WPA2/WPA3 personal all read as WPA (the Wi-Fi QR
+// convention has no WPA3 token); 802.1X has no shared passphrase at all.
+inline std::string wifiAuthToken(const std::string& authText, bool oneX)
+{
+    const std::string t = upperText(authText);
+    if (oneX || t.find("802.1X") != std::string::npos || t.find("EAP") != std::string::npos
+        || t.find("ENT") != std::string::npos)
+        return "enterprise";
+    if (t.find("WEP") != std::string::npos)
+        return "WEP";
+    if (t.find("SAE") != std::string::npos || t.find("WPA") != std::string::npos)
+        return "WPA";
+    return "nopass"; // open / none / empty
+}
+
+inline std::string wifiAuthToken(const WifiProfile& p)
+{
+    return wifiAuthToken(p.authText, p.oneX);
+}
+
+// What a QR code can do with this profile.
+enum class WifiShare { Ready, Open, NeedsKey, Enterprise };
+
+inline WifiShare wifiShare(const WifiProfile& p)
+{
+    const std::string token = wifiAuthToken(p);
+    if (token == "enterprise")
+        return WifiShare::Enterprise;
+    if (token == "nopass")
+        return WifiShare::Open;
+    if (p.key.empty() || p.keyProtected)
+        return WifiShare::NeedsKey;
+    return WifiShare::Ready;
+}
+
+// The payload for a shareable profile; empty when there is nothing to share.
+inline std::string wifiPayloadFor(const WifiProfile& p)
+{
+    switch (wifiShare(p)) {
+    case WifiShare::Ready: return wifiPayloadWith(p.ssid, p.key, wifiAuthToken(p));
+    case WifiShare::Open: return wifiPayloadWith(p.ssid, "", "nopass");
+    case WifiShare::NeedsKey:
+    case WifiShare::Enterprise: break;
+    }
+    return {};
+}
+
+// Subtitle note for a row: what the code carries, or why it cannot be made.
+inline std::string wifiShareNote(WifiShare share, bool zh)
+{
+    switch (share) {
+    case WifiShare::Ready: return zh ? "含密码" : "with key";
+    case WifiShare::Open: return zh ? "开放网络" : "open";
+    case WifiShare::NeedsKey: return zh ? "读不到密码，无法生成" : "the key is unreadable";
+    case WifiShare::Enterprise: return zh ? "企业网络（802.1X）没有共享密码" : "enterprise (802.1X) has no shared key";
+    }
+    return {};
+}
+
+// Case-insensitive SSID substring; an empty filter matches everything.
+inline bool ssidMatches(const std::string& ssid, const std::string& filter)
+{
+    if (filter.empty())
+        return true;
+    return upperText(ssid).find(upperText(filter)) != std::string::npos;
 }
 
 // ---- classification ----------------------------------------------------------

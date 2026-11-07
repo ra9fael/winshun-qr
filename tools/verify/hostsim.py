@@ -34,6 +34,28 @@ def send(proc, obj):
     proc.stdin.flush()
 
 
+def response_with_id(lines, want):
+    for line in list(lines):
+        try:
+            message = json.loads(line.decode("utf-8", "replace"))
+        except ValueError:
+            continue
+        if message.get("id") == want and "result" in message:
+            return message["result"]
+    return None
+
+
+def first_saved_row(lines, want):
+    """The first qrwifi row an action can run from, or None."""
+    result = response_with_id(lines, want)
+    if not result:
+        return None
+    for item in result.get("items", []):
+        if item.get("data", {}).get("wifi") and item.get("valid", True):
+            return item
+    return None
+
+
 def main():
     do_show = "noshow" not in sys.argv
     settings = {"ecc": "M", "moduleSize": 8, "quietZone": 4,
@@ -69,6 +91,25 @@ def main():
         "queryId": 4, "command": "qrwifi", "trigger": "", "keyword": "qrwifi",
         "text": "", "raw": "qrwifi", "limit": 200, "match": []}})
     time.sleep(0.5)
+    # The filter path: only the matching saved network survives.
+    send(proc, {"id": 9, "method": "query", "params": {
+        "queryId": 5, "command": "qrwifi", "trigger": "", "keyword": "qrwifi",
+        "text": "imp", "raw": "qrwifi imp", "limit": 200, "match": []}})
+    time.sleep(0.5)
+
+    # A saved network row: Enter on it. The row carries only the SSID, so this
+    # is what proves the passphrase is read again rather than carried in the
+    # item. The row chosen is the first one an action can run from.
+    saved = first_saved_row(out, 5)
+    if saved is None:
+        print("no saved Wi-Fi network row: the action path is not exercised")
+    else:
+        print(f"saved network row: {saved['title']} ({saved['subtitle']})")
+        send(proc, {"id": 8, "method": "action", "params": {
+            "command": "qrwifi", "action": "copyImage", "text": "",
+            "item": saved}})
+        time.sleep(0.5)
+
     # Enter: the image goes to the clipboard, the row says so. Then the
     # preview window (if do_show).
     send(proc, {"id": 6, "method": "action", "params": {

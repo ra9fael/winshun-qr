@@ -16,6 +16,14 @@ qrwifi：
 - 密码为空 → `T:nopass` 且无 P 段；密码含 "WEP" 字样 → `T:WEP`
 - 仅 SSID 无密码、SSID 含空格（第一个空格分隔）
 
+已保存网络（`parseWifiProfile` 等纯逻辑）：
+
+- 真实 v1 profile XML → SSID / `<authentication>` / 明文 key / `protected` / `useOneX` 逐项断言
+- 可分享性四态：WPA2/WPA3 personal + 明文 key → `Ready`；无 sharedKey → `Open`（`T:nopass`）；`protected=true` → `NeedsKey`；`useOneX=true` → `Enterprise`，后两者不产出 payload
+- 认证令牌：WPA2PSK / WPA3SAE → `WPA`，WEP → `WEP`，open → `nopass`
+- 只有 `<hex>` 的 SSID 解成 UTF-8；`&amp;` 等实体解码
+- SSID 筛选：空匹配全部、大小写不敏感、子串
+
 其余逻辑：
 
 - 设置解析：`moduleSize`/`quietZone` 越界回默认；非法颜色串回默认
@@ -27,6 +35,9 @@ qrwifi：
 ## 2 协议往返（对真实进程）
 
 - `initialize → query（非空文本）→ action copyImage → shutdown` 全链路 JSON-RPC
+- `qrwifi` 留空 → 列出本机已保存网络（本机实测 3 行：已连接的含密码、开放网络、未连接的含密码）；行里只有 SSID，密码不进 `data`
+- 对已保存网络行发 `copyImage` → 动作时重读 profile 并生成 `WIFI:T:WPA;S:<ssid>;P:<key>;;`
+- `qrwifi SSID 密码`（无匹配已保存网络）→ 回退手动形式
 - query 空文本：宿主注入剪贴板文本后正常返回；无文本返回提示行
 - `settingsChanged`（ECC L→M）后下一次 query 矩阵变化
 - cancel：长文本查询中途取消不崩溃、不回复孤儿帧
@@ -39,6 +50,9 @@ qrwifi：
 - [ ] Ctrl+Enter 预览：置顶、Esc/点外关闭；**连续开/关 20 次**（二次打开回归——binarylab 崩溃教训）
 - [ ] Shift+Enter 存图：Pictures 出现 PNG，重名 +1；手机扫存盘 PNG 成功
 - [ ] 深色主题下预览窗底色为浅色（码内留白仍是 lightColor，不随主题反转）
+- [ ] `qrwifi` 留空 → 列出已连接过的网络；Enter 复制，手机扫码连接成功
+- [ ] `qrwifi` 输入片段 → 只留匹配的网络；输入不存在的 `SSID 密码` → 手动形式照旧
+- [ ] 802.1X / 读不到密码的网络显示为不可选并写明原因
 - [ ] `qrwifi` SSID 密码含 `;` 与空格 → 手机扫码连接成功
 - [ ] 剪贴板是图片时留空查询 → 提示行
 - [ ] 中英文 locale 文案正确

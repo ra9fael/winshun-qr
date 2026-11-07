@@ -29,11 +29,23 @@
 
 ### qrwifi（关键字 `qrwifi`）
 
-- 参数 `SSID 密码`，以第一个空格分隔；密码可空 = 开放网络
+- 留空：列出本机**连接过**的 Wi-Fi（Windows 已保存的 profile），一行一个 SSID，subtitle 标注认证方式、是否当前连接、是否含密码；行内动作与 qr 相同
+- 输入文字：按 SSID 子串（不区分大小写）筛选上面的列表；一个都没匹配上时回退为手动形式 `SSID 密码`
+- 手动形式：参数 `SSID 密码`，以第一个空格分隔；密码可空 = 开放网络
 - 生成 `WIFI:T:<WPA|WEP|nopass>;S:<ssid>;P:<password>;;`：
-  - 密码非空按 WPA，含 WEP 字样按 WEP，空按 `T:nopass` 并省略 P 段
+  - 已保存 profile 的认证取自 profile XML 的 `<authentication>`：WPA / WPA2 / WPA3（含 `SAE`）→ `WPA`（Wi-Fi 二维码约定没有 WPA3 令牌），`WEP` → `WEP`，`open` → `nopass`
+  - 手动形式沿用旧规则：密码非空按 WPA，含 WEP 字样按 WEP，空按 `T:nopass` 并省略 P 段
   - SSID/密码中的 `\` `;` `,` `:` `"` 按规范以 `\` 转义
+- 不能分享的网络也列出，但标记为不可选（`valid:false`）：802.1X（没有共享密码）、密码读不到（profile 里仍是受保护的 blob）
 - 动作与 qr 相同
+
+### 3.1 读取已保存网络的密码（实测）
+
+`WlanGetProfile` 带 `WLAN_PROFILE_GET_PLAINTEXT_KEY` 对当前用户自己的 profile **不需要管理员权限**即返回明文（2026-11-08 实测：非提权进程 `TokenIsElevated=0`，3 个 profile 全部 `protected=false`；与 ra9fael.wifi 的结论一致）。因此 `qrwifi` 直接列网络，不要求先输 SSID 和密码。
+
+密码不进 item 的 `data`：行里只带 SSID，动作执行时再按 SSID 重读 profile。这样密码不落在宿主的 item 里，也不会因为列表刷新而变陈旧。拿不到明文时如实报错，不给假成功。
+
+**注意**：本插件 `runtime.qt` 为 `host`（共享宿主 Qt），而宿主文档写明首版不支持 `elevated` 与共享 Qt 同时使用，所以清单**不声明** `elevated`；域环境、组策略下发的 profile 在普通权限下能否读到明文未验证，读不到时走「标记不可选」路径。
 
 ## 4 行为规格
 
@@ -52,7 +64,7 @@
 - `clipboard:read`（空查询读剪贴板）、`clipboard:write`（复制图片）
 - `ui`（预览窗口）
 - `files:write` 限定 `%USERPROFILE%\Pictures`
-- 不做 `network`、`processes`、`elevated`
+- 不做 `network`、`processes`、`elevated`：`qrwifi` 用 wlanapi 读本机已保存的 profile，是本地配置读取，不是联网；不起子进程，也不提权（见 §3.1）
 
 ## 7 数据位置
 
@@ -64,6 +76,9 @@
 - 剪贴板非文本 → 提示行
 - Pictures 不可写（重定向/权限）→ 报错行带具体原因
 - 编码失败（理论不可达）→ 提示行，绝不写空图
+- `qrwifi` 读不到网络：无无线网卡 → 提示行（插网卡/开电台）；WlanSvc 未运行 → 提示行（启动 WlanSvc）；其他 wlanapi 错误 → 提示行带错误码
+- `qrwifi` 没有已保存网络且未输入 → 提示行「没有已保存的 Wi-Fi」，副标题提示先连接一次或直接输入 SSID 密码
+- 已保存网络的密码在动作时读不到（profile 被删/权限变化）→ 通知「这个 Wi-Fi 的密码现在读不到了」，不生成空图
 
 ## 9 里程碑
 
