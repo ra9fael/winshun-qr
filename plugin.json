@@ -1,0 +1,100 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LingCore/WinShun-plugins/main/schema/plugin.schema.json",
+  "manifest": 1,
+  "id": "ra9fael.qr",
+  "name": {"zh": "二维码", "en": "QR code"},
+  "version": "0.1.0",
+  "description": {
+    "zh": "文字、链接或剪贴板内容生成二维码：Enter 复制图片，Ctrl+Enter 预览，Shift+Enter 存 PNG；qrwifi 生成扫码即连的 Wi-Fi 二维码",
+    "en": "Turn text, a link or the clipboard into a QR code: Enter copies the image, Ctrl+Enter previews, Shift+Enter saves a PNG; qrwifi builds a scan-to-join Wi-Fi code"
+  },
+  "author": "ra9fael",
+  "homepage": "https://github.com/ra9fael/winshun-qr",
+  "license": "MIT",
+  "minWinShun": "0.22.0",
+  "permissions": [
+    "clipboard:read",
+    "clipboard:write",
+    "ui",
+    {"files:write": ["%USERPROFILE%\\Pictures"]}
+  ],
+  "runtime": {
+    "mode": "resident",
+    "program": "qr.exe",
+    "qt": "host",
+    "qtVersion": "6.12.0",
+    "sandbox": "normal",
+    "start": "lazy",
+    "timeoutMs": 1500,
+    "memoryMB": 256,
+    "idleExitSec": 300
+  },
+  "commands": [
+    {
+      "id": "qr",
+      "keyword": ["qr", "二维码"],
+      "title": {"zh": "二维码", "en": "QR code"},
+      "hint": {"zh": "输入文字或链接；留空用剪贴板", "en": "text or a link; empty uses the clipboard"},
+      "actions": [
+        {"id": "copyImage", "title": {"zh": "复制图片", "en": "Copy image"}, "key": "Enter"},
+        {"id": "preview", "title": {"zh": "预览", "en": "Preview"}, "key": "Ctrl+Enter"},
+        {"id": "savePng", "title": {"zh": "保存 PNG", "en": "Save PNG"}, "key": "Shift+Enter"}
+      ],
+      "ai": {
+        "description": "Generate a QR code image from the query text, or from the clipboard text when the query is empty. The result reports the content type (URL / text / Wi-Fi), QR version, ECC level and encoded byte count. Read-only: nothing changes until an action runs."
+      }
+    },
+    {
+      "id": "qrwifi",
+      "keyword": ["qrwifi"],
+      "title": {"zh": "Wi-Fi 二维码", "en": "Wi-Fi QR code"},
+      "hint": {"zh": "SSID 密码；密码留空生成开放网络的码", "en": "SSID password; an empty password means an open network"},
+      "actions": [
+        {"id": "copyImage", "title": {"zh": "复制图片", "en": "Copy image"}, "key": "Enter"},
+        {"id": "preview", "title": {"zh": "预览", "en": "Preview"}, "key": "Ctrl+Enter"},
+        {"id": "savePng", "title": {"zh": "保存 PNG", "en": "Save PNG"}, "key": "Shift+Enter"}
+      ],
+      "ai": {
+        "description": "Generate a scan-to-join Wi-Fi QR code from \"SSID password\" (empty password = open network). The password is not stored anywhere; only the image is produced."
+      }
+    }
+  ],
+  "settings": [
+    {
+      "key": "ecc",
+      "type": "choice",
+      "title": {"zh": "纠错级别", "en": "ECC level"},
+      "hint": {"zh": "L 约 7% 可恢复，M 15%，Q 25%，H 30%", "en": "L recovers ~7%, M 15%, Q 25%, H 30%"},
+      "options": ["L", "M", "Q", "H"],
+      "default": "M"
+    },
+    {
+      "key": "moduleSize",
+      "type": "number",
+      "title": {"zh": "模块像素", "en": "Module pixels"},
+      "hint": {"zh": "每个黑白格的边长，2–20，默认 8", "en": "Edge length of each module, 2–20, default 8"},
+      "default": 8
+    },
+    {
+      "key": "quietZone",
+      "type": "number",
+      "title": {"zh": "留白边距", "en": "Quiet zone"},
+      "hint": {"zh": "四周留白为几个模块宽，0–8，默认 4", "en": "Quiet zone in modules, 0–8, default 4"},
+      "default": 4
+    },
+    {
+      "key": "darkColor",
+      "type": "text",
+      "title": {"zh": "深色", "en": "Dark colour"},
+      "hint": {"zh": "#rrggbb，默认 #000000", "en": "#rrggbb, default #000000"},
+      "default": "#000000"
+    },
+    {
+      "key": "lightColor",
+      "type": "text",
+      "title": {"zh": "浅色", "en": "Light colour"},
+      "hint": {"zh": "#rrggbb，默认 #ffffff", "en": "#rrggbb, default #ffffff"},
+      "default": "#ffffff"
+    }
+  ]
+}
