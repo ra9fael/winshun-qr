@@ -97,6 +97,15 @@ def main():
         "text": "imp", "raw": "qrwifi imp", "limit": 200, "match": []}})
     time.sleep(0.5)
 
+    # The host dedupes rows by item id (Merge.cpp: first of an id wins), so a
+    # shared id would collapse the list to its first row. Guard that here.
+    result = response_with_id(out, 5)
+    ids = [item.get("id") for item in (result or {}).get("items", [])
+           if item.get("data", {}).get("wifi")]
+    print(f"saved-network ids: {ids}")
+    if len(ids) != len(set(ids)):
+        print("FAIL: duplicate item ids — the host would drop rows")
+
     # A saved network row: Enter on it. The row carries only the SSID, so this
     # is what proves the passphrase is read again rather than carried in the
     # item. The row chosen is the first one an action can run from.

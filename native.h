@@ -4,8 +4,12 @@
 // carries the passphrase. Asking for it with WLAN_PROFILE_GET_PLAINTEXT_KEY
 // returns it in the clear for the user's own profiles without elevation
 // (measured 2026-11-08, see docs/spec.md §4.1) - the same finding ra9fael.wifi
-// records. So `qrwifi` lists the networks once connected instead of asking for
-// the SSID and password again.
+// records. A profile re-saved into the all-user store (e.g. joined by an
+// elevated tool) hides its key from every non-elevated caller, and a
+// group-policy one hides it always; the row says which. A profile that cannot
+// be read at all still lists, named and marked, instead of vanishing. So
+// `qrwifi` lists the networks once connected instead of asking for the SSID
+// and password again.
 //
 // This file only collects; logic.h parses the XML and decides what a QR code
 // can carry, so the unit tests need no wireless adapter.
@@ -42,17 +46,34 @@ struct WifiCollection {
 
 namespace detail {
 
-inline std::string profileXml(HANDLE client, const GUID& interfaceId, const std::wstring& name)
+// One profile's XML and how it is stored, from the out flags of
+// WlanGetProfile: an all-user profile hands its key encrypted to every
+// non-elevated caller, however it asks, and a group-policy one to nobody at
+// all (measured 2026-11-08, docs/spec.md §4.1). A failed read is not an
+// empty string any more — the caller lists the row with `ssid` alone.
+struct ProfileRead {
+    std::string xml;
+    bool allUser = false;
+    bool groupPolicy = false;
+    std::string problem; // the WlanGetProfile error when the XML is empty
+};
+
+inline ProfileRead profileXml(HANDLE client, const GUID& interfaceId, const std::wstring& name)
 {
+    ProfileRead read;
     LPWSTR text = nullptr;
     DWORD granted = 0;
     DWORD flags = WLAN_PROFILE_GET_PLAINTEXT_KEY;
     const DWORD rc = ::WlanGetProfile(client, &interfaceId, name.c_str(), nullptr, &text, &flags, &granted);
-    if (rc != ERROR_SUCCESS || !text)
-        return {};
-    const std::string xml = winshun::utf8(std::wstring(text));
+    if (rc != ERROR_SUCCESS || !text) {
+        read.problem = "WlanGetProfile error " + std::to_string(rc);
+        return read;
+    }
+    read.xml = winshun::utf8(std::wstring(text));
+    read.allUser = (flags & WLAN_PROFILE_USER) != 0; // 0x2: the all-user store
+    read.groupPolicy = (flags & WLAN_PROFILE_GROUP_POLICY) != 0;
     ::WlanFreeMemory(text);
-    return xml;
+    return read;
 }
 
 // The SSID the interface is associated with; empty when it is not connected.
@@ -85,6 +106,13 @@ inline void addOrMerge(std::vector<WifiProfile>& out, const WifiProfile& profile
     for (WifiProfile& kept : out) {
         if (kept.ssid != profile.ssid)
             continue;
+        if (kept.readFailed && !profile.readFailed) {
+            // A readable profile beats a failed read of the same SSID.
+            const bool connected = kept.connected || profile.connected;
+            kept = profile;
+            kept.connected = kept.connected || connected;
+            return;
+        }
         kept.connected = kept.connected || profile.connected;
         if (kept.key.empty() && !profile.key.empty()) {
             kept.key = profile.key;
@@ -94,6 +122,9 @@ inline void addOrMerge(std::vector<WifiProfile>& out, const WifiProfile& profile
         kept.oneX = kept.oneX || profile.oneX;
         if (kept.authText.empty())
             kept.authText = profile.authText;
+        kept.groupPolicy = kept.groupPolicy || profile.groupPolicy;
+        kept.allUser = kept.allUser || profile.allUser;
+        kept.readFailed = kept.readFailed && profile.readFailed;
         return;
     }
     out.push_back(profile);
@@ -136,12 +167,21 @@ inline WifiCollection savedWifiProfiles()
             continue;
         for (DWORD p = 0; p < profiles->dwNumberOfItems; ++p) {
             const std::wstring name(profiles->ProfileInfo[p].strProfileName);
-            const std::string xml = detail::profileXml(client, info.InterfaceGuid, name);
-            if (xml.empty())
-                continue;
-            WifiProfile profile = parseWifiProfile(xml);
-            if (profile.ssid.empty())
-                profile.ssid = winshun::utf8(name); // a profile with neither <name> nor <hex>
+            const detail::ProfileRead read = detail::profileXml(client, info.InterfaceGuid, name);
+            WifiProfile profile;
+            if (read.xml.empty()) {
+                // A profile that cannot be read (permissions, GP) still gets
+                // its row: dropping it here is how qrwifi once showed one
+                // network where Windows had three.
+                profile.readFailed = true;
+                profile.ssid = winshun::utf8(name);
+            } else {
+                profile = parseWifiProfile(read.xml);
+                if (profile.ssid.empty())
+                    profile.ssid = winshun::utf8(name); // neither <name> nor <hex>
+            }
+            profile.allUser = read.allUser;
+            profile.groupPolicy = read.groupPolicy;
             profile.connected = !connected.empty() && profile.ssid == connected;
             detail::addOrMerge(out.profiles, profile);
         }

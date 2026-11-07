@@ -143,16 +143,23 @@ public:
         const std::string savedSsid = a.item["data"]["wifi"].toString();
         if (!savedSsid.empty()) {
             payload.clear();
+            std::string why;
             const WifiCollection wifi = savedWifiProfiles();
             for (const WifiProfile& profile : wifi.profiles) {
-                if (profile.ssid == savedSsid) {
-                    payload = wifiPayloadFor(profile);
-                    break;
-                }
+                if (profile.ssid != savedSsid)
+                    continue;
+                payload = wifiPayloadFor(profile);
+                if (payload.empty()) // the same reasons the row itself cannot share
+                    why = wifiShare(profile) == WifiShare::Enterprise
+                        ? (zh ? "企业网络（802.1X）没有可共享的密码"
+                              : "An enterprise (802.1X) network has no shared key")
+                        : wifiKeyNote(profile, zh);
+                break;
             }
             if (payload.empty())
-                return {winshun::effect::notify(
-                    zh ? "这个 Wi-Fi 的密码现在读不到了" : "That Wi-Fi's key cannot be read now")};
+                return {winshun::effect::notify(why.empty()
+                    ? (zh ? "该网络已不在保存的 Wi-Fi 里" : "The network is no longer among the saved ones")
+                    : why)};
         }
         if (payload.empty())
             return {winshun::effect::notify(zh ? "先运行一次查询，再执行动作" : "Run a query before an action")};
@@ -239,14 +246,18 @@ private:
     }
 
     // A saved network's row. The item carries only the SSID — the passphrase is
-    // read again when an action runs, so it never sits in the host's item.
+    // read again when an action runs, so it never sits in the host's item. The
+    // id is unique per SSID: the host keeps the first row of a duplicated id
+    // (Merge.cpp), which is how a three-network list once became one row.
     static winshun::Item savedWifiRow(const WifiProfile& profile, bool zh, const Settings& st)
     {
         const WifiShare share = wifiShare(profile);
-        std::vector<std::string> parts {"Wi-Fi", wifiAuthLabel(profile, zh)};
+        std::vector<std::string> parts {"Wi-Fi"};
+        if (!profile.readFailed)
+            parts.push_back(wifiAuthLabel(profile, zh)); // a failed read knows no auth either
         if (profile.connected)
             parts.push_back(zh ? "已连接" : "connected");
-        parts.push_back(wifiShareNote(share, zh));
+        parts.push_back(wifiKeyNote(profile, zh));
 
         if (share == WifiShare::Ready || share == WifiShare::Open) {
             const std::string payload = wifiPayloadFor(profile);
@@ -255,7 +266,7 @@ private:
                 char tail[80];
                 std::snprintf(tail, sizeof(tail), zh ? " · v%d · %s · %zu 字节" : " · v%d · %s · %zu B",
                               code.version, eccName(code.level), payload.size());
-                winshun::Item row("wifi", profile.ssid, joinNote(parts) + tail);
+                winshun::Item row(wifiItemId(profile.ssid), profile.ssid, joinNote(parts) + tail);
                 row.withData(winshun::Json::Object {{"command", "qrwifi"},
                                                     {"text", profile.ssid},
                                                     {"wifi", profile.ssid}});
@@ -266,9 +277,17 @@ private:
             }
         }
 
-        // Not shareable: the reason is already in `parts`, and Enter does nothing.
-        winshun::Item row("wifi", profile.ssid, joinNote(parts));
+        // Not shareable yet. The reason is in `parts`; the actions stay, since
+        // they read the profile again — the host may run elevated by then, or
+        // the profile have been re-saved per-user — and say why not otherwise.
+        // An enterprise network has no shared key for any run to find, so its
+        // row gets none.
+        winshun::Item row(wifiItemId(profile.ssid), profile.ssid, joinNote(parts));
         row.withIcon("color:#E8A33D").withScore(50).invalid();
+        if (share != WifiShare::Enterprise)
+            row.withActions({{"copyImage", zh ? "复制图片" : "Copy image", "Enter"},
+                             {"preview", zh ? "预览" : "Preview", "Ctrl+Enter"},
+                             {"savePng", zh ? "保存 PNG" : "Save PNG", "Shift+Enter"}});
         return row;
     }
 

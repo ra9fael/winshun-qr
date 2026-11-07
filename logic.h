@@ -190,7 +190,34 @@ struct WifiProfile {
     bool keyProtected = false; // the key came back as an encrypted blob
     bool oneX = false;         // 802.1X: no shared passphrase at all
     bool connected = false;    // this SSID is the current connection
+    bool groupPolicy = false;  // pushed by Group Policy: Windows never gives
+                               // the plaintext key to a normal process
+    bool allUser = false;      // stored in the all-user profile store: a
+                               // non-elevated caller gets the key encrypted,
+                               // however it asks (measured, spec §4.1)
+    bool readFailed = false;   // WlanGetProfile returned no XML at all
 };
+
+// A stable, unique item id for a saved network's row. The host dedupes an
+// answer by row path (Merge.cpp: "each item once, the first of an id wins"),
+// and the path embeds the item id, so two SSIDs must never share one. The id
+// goes into row paths where '/' separates, and '%' is this scheme's escape —
+// both (and control bytes) get %-encoded, which keeps the mapping injective.
+inline std::string wifiItemId(const std::string& ssid)
+{
+    static const char kHex[] = "0123456789ABCDEF";
+    std::string out = "wifi-";
+    for (const unsigned char c : ssid) {
+        if (c == '/' || c == '%' || c < 0x21) {
+            out += '%';
+            out += kHex[c >> 4];
+            out += kHex[c & 15];
+        } else {
+            out += static_cast<char>(c);
+        }
+    }
+    return out;
+}
 
 // The text of the first <tag>…</tag>, entities decoded; empty when the tag is
 // absent or self-closing. The element name must match whole, so <name> does
@@ -392,6 +419,8 @@ enum class WifiShare { Ready, Open, NeedsKey, Enterprise };
 
 inline WifiShare wifiShare(const WifiProfile& p)
 {
+    if (p.readFailed)
+        return WifiShare::NeedsKey; // nothing about the network is known
     const std::string token = wifiAuthToken(p);
     if (token == "enterprise")
         return WifiShare::Enterprise;
@@ -424,6 +453,24 @@ inline std::string wifiShareNote(WifiShare share, bool zh)
     case WifiShare::Enterprise: return zh ? "企业网络（802.1X）没有共享密码" : "enterprise (802.1X) has no shared key";
     }
     return {};
+}
+
+// The sharper reason a key cannot be shared, when one is known: the profile
+// failed to read at all, Group Policy keeps every key, or the profile sits in
+// the all-user store and hides its key from a non-elevated caller (measured
+// 2026-11-08, spec §4.1). Falls back to the plain "unreadable" note.
+inline std::string wifiKeyNote(const WifiProfile& p, bool zh)
+{
+    if (p.readFailed)
+        return zh ? "配置读取失败，无法生成" : "the profile could not be read";
+    if (wifiShare(p) == WifiShare::NeedsKey) {
+        if (p.groupPolicy)
+            return zh ? "组策略管理此网络，密码不可共享" : "managed by Group Policy; the key is not shared";
+        if (p.allUser)
+            return zh ? "保存为所有用户配置，明文密码需管理员读取"
+                      : "saved for all users; the plaintext key needs an elevated read";
+    }
+    return wifiShareNote(wifiShare(p), zh);
 }
 
 // Case-insensitive SSID substring; an empty filter matches everything.

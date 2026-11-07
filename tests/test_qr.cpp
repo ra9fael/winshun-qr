@@ -380,6 +380,51 @@ void testSavedWifiProfiles()
     expect(ssidMatches("MyNet", "myn"), "filter: case-insensitive substring");
     expect(ssidMatches("MyNet", "net"), "filter: anywhere in the SSID");
     expect(!ssidMatches("MyNet", "cafe"), "filter: no match");
+
+    // Row ids are unique per SSID — the host keeps the first row of a
+    // duplicated id, which is how a three-network list once became one.
+    expect(wifiItemId("MyNet") != wifiItemId("Other"), "ids: different SSIDs, different ids");
+    expectEq(wifiItemId("MyNet"), "wifi-MyNet", "ids: plain SSIDs pass through");
+    expectEq(wifiItemId("a/b"), "wifi-a%2Fb", "ids: the path separator is encoded");
+    expectEq(wifiItemId("a%b"), "wifi-a%25b", "ids: the escape byte is encoded itself");
+    expect(wifiItemId("a/b") != wifiItemId("a%2Fb"), "ids: the mapping is injective");
+
+    // A group-policy profile reads fine but never gives up its key.
+    WifiProfile gp = wpa2;
+    gp.groupPolicy = true;
+    gp.keyProtected = true;
+    gp.key.clear();
+    expect(wifiShare(gp) == WifiShare::NeedsKey, "profile: a group-policy key is not shareable");
+
+    // A profile whose XML could not be read at all still becomes a row —
+    // and it is NOT treated as an open network, which would share a wrong code.
+    WifiProfile unreadable = wpa2;
+    unreadable.readFailed = true;
+    unreadable.keyProtected = false;
+    unreadable.keyPresent = false;
+    expect(wifiShare(unreadable) == WifiShare::NeedsKey, "profile: a failed read is not shareable");
+    expect(wifiPayloadFor(unreadable).empty(), "profile: a failed read has no payload");
+
+    // An all-user profile (joined by an elevated tool, say) hides its key from
+    // every non-elevated caller, however it asks (measured, spec §4.1).
+    WifiProfile allUser = wpa2;
+    allUser.allUser = true;
+    allUser.keyProtected = true;
+    allUser.key.clear();
+    expect(wifiShare(allUser) == WifiShare::NeedsKey, "profile: an all-user key is not shareable");
+
+    // The notes say why, sharper than plain "unreadable" where known.
+    expectEq(wifiKeyNote(wpa2, true), "含密码", "note: a ready profile says what the code carries");
+    expectEq(wifiKeyNote(unreadable, true), "配置读取失败，无法生成", "note: a failed read names itself");
+    expectEq(wifiKeyNote(gp, true), "组策略管理此网络，密码不可共享", "note: group policy names itself");
+    expectEq(wifiKeyNote(allUser, true), "保存为所有用户配置，明文密码需管理员读取",
+             "note: an all-user profile names itself");
+    expectEq(wifiKeyNote(allUser, false), "saved for all users; the plaintext key needs an elevated read",
+             "note: the English all-user note");
+    WifiProfile hidden = wpa2;
+    hidden.keyProtected = true;
+    hidden.key.clear();
+    expectEq(wifiKeyNote(hidden, true), "读不到密码，无法生成", "note: no known reason keeps the plain note");
 }
 
 // ---- settings ----------------------------------------------------------------

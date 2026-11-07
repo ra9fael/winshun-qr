@@ -20,6 +20,11 @@ qrwifi：
 
 - 真实 v1 profile XML → SSID / `<authentication>` / 明文 key / `protected` / `useOneX` 逐项断言
 - 可分享性四态：WPA2/WPA3 personal + 明文 key → `Ready`；无 sharedKey → `Open`（`T:nopass`）；`protected=true` → `NeedsKey`；`useOneX=true` → `Enterprise`，后两者不产出 payload
+- 组策略 profile（`groupPolicy=true`，key 清空）→ `NeedsKey`，不产出 payload
+- 所有用户 profile（`allUser=true`，key 清空）→ `NeedsKey`，不产出 payload
+- 读取失败（`readFailed=true`）→ `NeedsKey` 而非 `Open`，不产出 payload
+- 原因注记 `wifiKeyNote`：Ready → 「含密码」；readFailed / groupPolicy / allUser 各写明自己的原因（中英两语）；无已知原因保持「读不到密码，无法生成」
+- 行 id 按 SSID 唯一：三个不同 SSID 得到三个不同 id（宿主对重复 id 只保留第一行）
 - 认证令牌：WPA2PSK / WPA3SAE → `WPA`，WEP → `WEP`，open → `nopass`
 - 只有 `<hex>` 的 SSID 解成 UTF-8；`&amp;` 等实体解码
 - SSID 筛选：空匹配全部、大小写不敏感、子串
@@ -52,7 +57,9 @@ qrwifi：
 - [ ] 深色主题下预览窗底色为浅色（码内留白仍是 lightColor，不随主题反转）
 - [ ] `qrwifi` 留空 → 列出已连接过的网络；Enter 复制，手机扫码连接成功
 - [ ] `qrwifi` 输入片段 → 只留匹配的网络；输入不存在的 `SSID 密码` → 手动形式照旧
-- [ ] 802.1X / 读不到密码的网络显示为不可选并写明原因
+- [ ] 本机全部已保存网络都列出（按 SSID 唯一 id，不再被宿主按 id 去重吞行）
+- [ ] 802.1X / 读不到密码的网络显示为不可选并写明原因；→ 菜单里复制图片/预览/保存 PNG 仍在（802.1X 除外），执行时如实报错
+- [ ] 所有用户配置的网络：副标题写「保存为所有用户配置，明文密码需管理员读取」；以管理员运行宿主后重读可得明文
 - [ ] `qrwifi` SSID 密码含 `;` 与空格 → 手机扫码连接成功
 - [ ] 剪贴板是图片时留空查询 → 提示行
 - [ ] 中英文 locale 文案正确

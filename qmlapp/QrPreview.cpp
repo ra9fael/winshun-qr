@@ -5,11 +5,19 @@
 // while an old one is alive (spec §4): showPreview() destroys the previous
 // instance first — the DOMINO crash of a reused HWND is exactly what this
 // avoids — then builds a fresh window from Preview.qml.
+//
+// Destruction is close() + deleteLater(), never a direct delete: the close
+// request arrives from the window's own event handling (Esc, or the focus
+// loss that means "clicked outside"), and a delete there would return through
+// frames that belong to the freed window — the 0xC0000409 crashes. The
+// DeferredDelete is flushed before the next window is built, so the HWND
+// guarantee still holds.
 #include "QrPreview.h"
 #include "PreviewController.h"
 #include "../winshun.h"
 
 #include <QClipboard>
+#include <QCoreApplication>
 #include <QCursor>
 #include <QGuiApplication>
 #include <QImage>
@@ -49,18 +57,24 @@ PreviewController* ensureController()
     return g_controller;
 }
 
+void flushWindowDeletes()
+{
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+}
+
 void destroyWindow()
 {
     if (!g_window)
         return;
-    g_window->close();
-    delete g_window; // the HWND is gone before any next window is built
+    g_window->close();       // the HWND is destroyed here
+    g_window->deleteLater(); // never a direct delete: see the file comment
     g_window = nullptr;
 }
 
 bool guiShow(const PreviewSpec& spec, const Settings& settings, std::string& error)
 {
     destroyWindow();
+    flushWindowDeletes(); // the old window is really gone before the next HWND
     PreviewController* controller = ensureController();
     controller->setText(QString::fromStdString(spec.text), spec.zh, settings);
 
