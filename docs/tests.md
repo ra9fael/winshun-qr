@@ -21,9 +21,9 @@ qrwifi：
 - 真实 v1 profile XML → SSID / `<authentication>` / 明文 key / `protected` / `useOneX` 逐项断言
 - 可分享性四态：WPA2/WPA3 personal + 明文 key → `Ready`；无 sharedKey → `Open`（`T:nopass`）；`protected=true` → `NeedsKey`；`useOneX=true` → `Enterprise`，后两者不产出 payload
 - 组策略 profile（`groupPolicy=true`，key 清空）→ `NeedsKey`，不产出 payload
-- 所有用户 profile（`allUser=true`，key 清空）→ `NeedsKey`，不产出 payload
+- 个人 profile（`perUser=true`，key 清空）→ `NeedsKey`，不产出 payload
 - 读取失败（`readFailed=true`）→ `NeedsKey` 而非 `Open`，不产出 payload
-- 原因注记 `wifiKeyNote`：Ready → 「含密码」；readFailed / groupPolicy / allUser 各写明自己的原因（中英两语）；无已知原因保持「读不到密码，无法生成」
+- 原因注记 `wifiKeyNote`：Ready → 「含密码」；readFailed / groupPolicy / perUser 各写明自己的原因（中英两语）；无已知原因保持「读不到密码，无法生成」
 - 行 id 按 SSID 唯一：三个不同 SSID 得到三个不同 id（宿主对重复 id 只保留第一行）
 - 认证令牌：WPA2PSK / WPA3SAE → `WPA`，WEP → `WEP`，open → `nopass`
 - 只有 `<hex>` 的 SSID 解成 UTF-8；`&amp;` 等实体解码

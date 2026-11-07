@@ -405,22 +405,22 @@ void testSavedWifiProfiles()
     expect(wifiShare(unreadable) == WifiShare::NeedsKey, "profile: a failed read is not shareable");
     expect(wifiPayloadFor(unreadable).empty(), "profile: a failed read has no payload");
 
-    // An all-user profile (joined by an elevated tool, say) hides its key from
-    // every non-elevated caller, however it asks (measured, spec §4.1).
-    WifiProfile allUser = wpa2;
-    allUser.allUser = true;
-    allUser.keyProtected = true;
-    allUser.key.clear();
-    expect(wifiShare(allUser) == WifiShare::NeedsKey, "profile: an all-user key is not shareable");
+    // A per-user profile (WLAN_PROFILE_USER) hides its key from this context,
+    // however it asks (measured, spec §4.1); an all-user one hands it over.
+    WifiProfile perUser = wpa2;
+    perUser.perUser = true;
+    perUser.keyProtected = true;
+    perUser.key.clear();
+    expect(wifiShare(perUser) == WifiShare::NeedsKey, "profile: a per-user key is not shareable");
 
     // The notes say why, sharper than plain "unreadable" where known.
     expectEq(wifiKeyNote(wpa2, true), "含密码", "note: a ready profile says what the code carries");
     expectEq(wifiKeyNote(unreadable, true), "配置读取失败，无法生成", "note: a failed read names itself");
     expectEq(wifiKeyNote(gp, true), "组策略管理此网络，密码不可共享", "note: group policy names itself");
-    expectEq(wifiKeyNote(allUser, true), "保存为所有用户配置，明文密码需管理员读取",
-             "note: an all-user profile names itself");
-    expectEq(wifiKeyNote(allUser, false), "saved for all users; the plaintext key needs an elevated read",
-             "note: the English all-user note");
+    expectEq(wifiKeyNote(perUser, true), "保存为个人配置，当前上下文读不到密码",
+             "note: a per-user profile names itself");
+    expectEq(wifiKeyNote(perUser, false), "saved as a per-user profile; the key cannot be read here",
+             "note: the English per-user note");
     WifiProfile hidden = wpa2;
     hidden.keyProtected = true;
     hidden.key.clear();

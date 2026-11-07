@@ -192,9 +192,9 @@ struct WifiProfile {
     bool connected = false;    // this SSID is the current connection
     bool groupPolicy = false;  // pushed by Group Policy: Windows never gives
                                // the plaintext key to a normal process
-    bool allUser = false;      // stored in the all-user profile store: a
-                               // non-elevated caller gets the key encrypted,
-                               // however it asks (measured, spec §4.1)
+    bool perUser = false;      // a per-user profile (WLAN_PROFILE_USER, 0x2):
+                               // this context gets the key encrypted, however
+                               // it asks (measured, spec §4.1)
     bool readFailed = false;   // WlanGetProfile returned no XML at all
 };
 
@@ -456,9 +456,9 @@ inline std::string wifiShareNote(WifiShare share, bool zh)
 }
 
 // The sharper reason a key cannot be shared, when one is known: the profile
-// failed to read at all, Group Policy keeps every key, or the profile sits in
-// the all-user store and hides its key from a non-elevated caller (measured
-// 2026-11-08, spec §4.1). Falls back to the plain "unreadable" note.
+// failed to read at all, Group Policy keeps every key, or the profile is a
+// per-user one (WLAN_PROFILE_USER) whose key this context cannot read
+// (measured 2026-11-08, spec §4.1). Falls back to the plain "unreadable" note.
 inline std::string wifiKeyNote(const WifiProfile& p, bool zh)
 {
     if (p.readFailed)
@@ -466,9 +466,9 @@ inline std::string wifiKeyNote(const WifiProfile& p, bool zh)
     if (wifiShare(p) == WifiShare::NeedsKey) {
         if (p.groupPolicy)
             return zh ? "组策略管理此网络，密码不可共享" : "managed by Group Policy; the key is not shared";
-        if (p.allUser)
-            return zh ? "保存为所有用户配置，明文密码需管理员读取"
-                      : "saved for all users; the plaintext key needs an elevated read";
+        if (p.perUser)
+            return zh ? "保存为个人配置，当前上下文读不到密码"
+                      : "saved as a per-user profile; the key cannot be read here";
     }
     return wifiShareNote(wifiShare(p), zh);
 }

@@ -2,14 +2,13 @@
 //
 // Windows keeps every network the user has joined as a profile, and its XML
 // carries the passphrase. Asking for it with WLAN_PROFILE_GET_PLAINTEXT_KEY
-// returns it in the clear for the user's own profiles without elevation
-// (measured 2026-11-08, see docs/spec.md §4.1) - the same finding ra9fael.wifi
-// records. A profile re-saved into the all-user store (e.g. joined by an
-// elevated tool) hides its key from every non-elevated caller, and a
-// group-policy one hides it always; the row says which. A profile that cannot
-// be read at all still lists, named and marked, instead of vanishing. So
-// `qrwifi` lists the networks once connected instead of asking for the SSID
-// and password again.
+// returns it in the clear without elevation for an all-user profile (no
+// out flag) (measured 2026-11-08, see docs/spec.md §4.1). A per-user one
+// (WLAN_PROFILE_USER, 0x2) hides its key from this context however it asks,
+// and a group-policy one (0x1) hides it always; the row says which. A
+// profile that cannot be read at all still lists, named and marked, instead
+// of vanishing. So `qrwifi` lists the networks once connected instead of
+// asking for the SSID and password again.
 //
 // This file only collects; logic.h parses the XML and decides what a QR code
 // can carry, so the unit tests need no wireless adapter.
@@ -47,13 +46,14 @@ struct WifiCollection {
 namespace detail {
 
 // One profile's XML and how it is stored, from the out flags of
-// WlanGetProfile: an all-user profile hands its key encrypted to every
-// non-elevated caller, however it asks, and a group-policy one to nobody at
-// all (measured 2026-11-08, docs/spec.md §4.1). A failed read is not an
-// empty string any more — the caller lists the row with `ssid` alone.
+// WlanGetProfile: an all-user profile (no flag) hands its key to this
+// context, a per-user one (WLAN_PROFILE_USER, 0x2) hides it, and a
+// group-policy one (0x1) hides it from every normal caller (measured
+// 2026-11-08, docs/spec.md §4.1). A failed read is not an empty string any
+// more — the caller lists the row with `ssid` alone.
 struct ProfileRead {
     std::string xml;
-    bool allUser = false;
+    bool perUser = false;
     bool groupPolicy = false;
     std::string problem; // the WlanGetProfile error when the XML is empty
 };
@@ -70,7 +70,7 @@ inline ProfileRead profileXml(HANDLE client, const GUID& interfaceId, const std:
         return read;
     }
     read.xml = winshun::utf8(std::wstring(text));
-    read.allUser = (flags & WLAN_PROFILE_USER) != 0; // 0x2: the all-user store
+    read.perUser = (flags & WLAN_PROFILE_USER) != 0; // 0x2: per-user; no flag means all-user
     read.groupPolicy = (flags & WLAN_PROFILE_GROUP_POLICY) != 0;
     ::WlanFreeMemory(text);
     return read;
@@ -123,7 +123,7 @@ inline void addOrMerge(std::vector<WifiProfile>& out, const WifiProfile& profile
         if (kept.authText.empty())
             kept.authText = profile.authText;
         kept.groupPolicy = kept.groupPolicy || profile.groupPolicy;
-        kept.allUser = kept.allUser || profile.allUser;
+        kept.perUser = kept.perUser || profile.perUser;
         kept.readFailed = kept.readFailed && profile.readFailed;
         return;
     }
@@ -180,7 +180,7 @@ inline WifiCollection savedWifiProfiles()
                 if (profile.ssid.empty())
                     profile.ssid = winshun::utf8(name); // neither <name> nor <hex>
             }
-            profile.allUser = read.allUser;
+            profile.perUser = read.perUser;
             profile.groupPolicy = read.groupPolicy;
             profile.connected = !connected.empty() && profile.ssid == connected;
             detail::addOrMerge(out.profiles, profile);

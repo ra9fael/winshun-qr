@@ -36,10 +36,10 @@
   - 已保存 profile 的认证取自 profile XML 的 `<authentication>`：WPA / WPA2 / WPA3（含 `SAE`）→ `WPA`（Wi-Fi 二维码约定没有 WPA3 令牌），`WEP` → `WEP`，`open` → `nopass`
   - 手动形式沿用旧规则：密码非空按 WPA，含 WEP 字样按 WEP，空按 `T:nopass` 并省略 P 段
   - SSID/密码中的 `\` `;` `,` `:` `"` 按规范以 `\` 转义
-- 不能分享的网络也列出，但标记为不可选（`valid:false`），并在 subtitle 写明原因；除 802.1X 外仍保留三个动作（复制图片/预览/保存 PNG）——动作会重读 profile（宿主此后可能以管理员运行、profile 可能被改回每用户），仍拿不到时如实报错：
+- 不能分享的网络也列出，但标记为不可选（`valid:false`），并在 subtitle 写明原因；除 802.1X 外仍保留三个动作（复制图片/预览/保存 PNG）——动作会重读 profile（宿主此后可能以管理员运行、profile 可能被重新保存），仍拿不到时如实报错：
   - 802.1X（没有共享密码）→ 无动作，永远无法生成
-  - 组策略下发的 profile → 「组策略管理此网络，密码不可共享」
-  - 所有用户配置（`WLAN_PROFILE_USER` 标志）→ 「保存为所有用户配置，明文密码需管理员读取」
+  - 组策略下发的 profile（`WLAN_PROFILE_GROUP_POLICY`，0x1）→ 「组策略管理此网络，密码不可共享」
+  - 个人 profile（`WLAN_PROFILE_USER`，0x2）→ 「保存为个人配置，当前上下文读不到密码」
   - profile XML 读取失败 → 「配置读取失败，无法生成」（不再从列表消失，见 §3.1）
 - 动作与 qr 相同
 - 行 id 按 SSID 唯一（`wifi:<ssid>`）：宿主对重复 id 只保留第一行（Merge.cpp），曾是「三个网络只显示一个」的原因
@@ -54,7 +54,7 @@
 
 **2026-11-08 补充实测**（`tools/verify/probe_profiles.cpp`，同一非提权进程）：
 
-- 每个 profile 的 out-flags 决定明文是否可得：无标志（0x0）的每用户 profile 明文可读；带 `WLAN_PROFILE_USER`（0x2，所有用户配置）的 profile **即使带 `GET_PLAINTEXT_KEY` 也只返回受保护 blob**——该 profile 曾被提权上下文（如 ra9fael.wifi 连接时）重存为所有用户配置；组策略标志（0x1）同理更严
+- 每个 profile 的 out-flags 决定明文是否可得：无标志（0x0，all-user）的 profile 明文可读；带 `WLAN_PROFILE_USER`（0x2，**per-user 个人配置**）的 profile **即使带 `GET_PLAINTEXT_KEY` 也只返回受保护 blob**（如 HJJ，推测曾被提权上下文重存为个人配置）；组策略（0x1）同理更严。wlanapi.h 没有 `WLAN_PROFILE_ALL_USER` 常量——all-user 由「无标志」表示
 - 因此行 subtitle 按 out-flags 写明原因（§3），动作执行时重读：宿主此后以管理员运行即可读到
 - `WlanGetProfile` 本身失败的 profile（权限、句柄等）也保留一行（SSID 取 profile 名，subtitle 写「配置读取失败」并带错误码），不再静默跳过
 - 宿主端配套：→ 菜单与 footer 对 invalid 行也列出插件动作；动作分发原本就不检查 `valid`，宿主此前在菜单处拦截（WinShun Launcher.cpp 同轮修复）
@@ -90,8 +90,8 @@
 - 编码失败（理论不可达）→ 提示行，绝不写空图
 - `qrwifi` 读不到网络：无无线网卡 → 提示行（插网卡/开电台）；WlanSvc 未运行 → 提示行（启动 WlanSvc）；其他 wlanapi 错误 → 提示行带错误码
 - `qrwifi` 没有已保存网络且未输入 → 提示行「没有已保存的 Wi-Fi」，副标题提示先连接一次或直接输入 SSID 密码
-- `qrwifi` 单个 profile 读不到（所有用户/组策略/读取失败）→ 网络仍列出并写明原因；三个动作仍在（802.1X 除外），执行时重读并如实报错
-- 已保存网络的密码在动作时读不到 → 按原因通知（企业网络 / 所有用户配置 / 组策略 / 读取失败）；网络已被删除 → 通知「该网络已不在保存的 Wi-Fi 里」；绝不生成空图
+- `qrwifi` 单个 profile 读不到（个人配置/组策略/读取失败）→ 网络仍列出并写明原因；三个动作仍在（802.1X 除外），执行时重读并如实报错
+- 已保存网络的密码在动作时读不到 → 按原因通知（企业网络 / 个人配置 / 组策略 / 读取失败）；网络已被删除 → 通知「该网络已不在保存的 Wi-Fi 里」；绝不生成空图
 
 ## 9 里程碑
 
