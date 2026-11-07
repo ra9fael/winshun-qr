@@ -1,6 +1,6 @@
 # ra9fael.qr 功能规格（v0.1.0）
 
-状态：设计完成，代码未实现。协议与清单字段以 WinShun 0.22.0 插件文档为准（resident JSON-RPC over stdio）。
+状态：已实现（v0.1.0）。协议与清单字段以 WinShun 0.22.0 插件文档为准（resident JSON-RPC over stdio）。
 
 ## 1 目标
 
