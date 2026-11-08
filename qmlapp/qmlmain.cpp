@@ -21,7 +21,6 @@
 
 #include <QGuiApplication>
 #include "../qt_window_icon.h"
-#include "../qt_window_icon.h"
 #include <QQuickWindow>
 
 #include <windows.h>
@@ -47,7 +46,6 @@ void prepareGui(const QString& appDir)
 void startGui()
 {
     qunsetenv("QT_QPA_PLATFORM");
-    setPluginWindowIcon();
     setPluginWindowIcon();
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
     QQuickWindow::setTextRenderType(QQuickWindow::NativeTextRendering);

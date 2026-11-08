@@ -5,14 +5,6 @@
 #include "qrcode.h"
 #include "qmlapp/QrPreview.h"
 
-#include <QClipboard>
-#include <QDateTime>
-#include <QDir>
-#include <QFile>
-#include <QGuiApplication>
-#include <QImage>
-#include <QThread>
-
 #include <cstdio>
 #include <string>
 
@@ -109,7 +101,8 @@ public:
 
         if (a.action == "copyImage") {
             const Bitmap bmp = renderImage(code, st);
-            putImageOnClipboard(bmp);
+            if (!putImageOnClipboard(bmp))
+                return {winshun::effect::notify(zh ? "复制图片失败" : "Failed to copy image")};
             // The row says so; no toast (spec §3).
             return {winshun::effect::replace({resultRow(payload, text, command, code, zh, zh ? "已复制" : "copied")})};
         }
@@ -124,7 +117,7 @@ public:
         }
         if (a.action == "savePng") {
             std::string error;
-            const std::string path = savePng(code, st, error);
+            const std::string path = savePng(code, st, zh, error);
             if (path.empty())
                 return {winshun::effect::notify(error.empty() ? "保存失败" : error)};
             return {winshun::effect::replace({resultRow(payload, text, command, code, zh,
@@ -161,39 +154,7 @@ private:
         return row;
     }
 
-    // %USERPROFILE%\Pictures (the manifest's files:write scope). Returns the
-    // full native path, or empty with `error` set.
-    std::string savePng(const Code& code, const Settings& st, std::string& error)
-    {
-        const bool zh = chinese();
-        const QString pictures = qEnvironmentVariable("USERPROFILE") + "/Pictures";
-        if (!QDir(pictures).exists() && !QDir().mkpath(pictures)) {
-            error = zh ? "保存失败：Pictures 文件夹不可用" : "Save failed: the Pictures folder is unavailable";
-            return {};
-        }
-        const QDateTime now = QDateTime::currentDateTime();
-        const QDate d = now.date();
-        const QTime t = now.time();
-        const std::string name = saveFileName(d.year(), d.month(), d.day(), t.hour(), t.minute(),
-                                              t.second(), [&pictures](const std::string& n) {
-                                                  return QFile::exists(pictures + "/"
-                                                                       + QString::fromStdString(n));
-                                              });
-        if (name.empty()) {
-            error = zh ? "保存失败：文件名冲突过多" : "Save failed: too many name collisions";
-            return {};
-        }
-        const Bitmap bmp = renderImage(code, st);
-        QImage image(reinterpret_cast<const uchar*>(bmp.pixels.data()), bmp.width, bmp.height,
-                     bmp.width * 4, QImage::Format_RGB32);
-        const QString file = pictures + "/" + QString::fromStdString(name);
-        if (image.isNull() || !image.save(file, "PNG")) {
-            error = zh ? "保存失败：无法写入 " + pictures.toStdString()
-                       : "Save failed: cannot write " + pictures.toStdString();
-            return {};
-        }
-        return QDir::toNativeSeparators(file).toStdString();
-    }
+
 };
 
 // The plugin protocol loop (qmlapp/qmlmain.cpp starts it on the worker thread).

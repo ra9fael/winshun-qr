@@ -29,7 +29,10 @@ void closePreview();
 std::string clipboardText();
 
 // Puts the rendered image on the clipboard, from any thread.
-void putImageOnClipboard(const Bitmap& bmp);
+bool putImageOnClipboard(const Bitmap& bmp);
+
+// Save the original image atomically under the manifest's Pictures scope.
+std::string savePng(const Code& code, const Settings& settings, bool zh, std::string& error);
 
 // The JSON-RPC serve loop; qmlmain.cpp runs it on the worker thread.
 int runServeLoop();

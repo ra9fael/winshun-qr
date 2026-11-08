@@ -2,7 +2,7 @@
 
 把文字、链接或剪贴板内容变成二维码图：**Enter 复制图片、Ctrl+Enter 预览、Shift+Enter 存 PNG**。Wi-Fi 二维码请在 **ra9fael.wifi** 的 `wifi` 网络动作菜单中生成。
 
-当前版本：**v0.2.0**。已删除 `qrwifi` 命令；本插件只负责文字、链接和剪贴板内容。
+当前版本：**v0.2.1**。已删除 `qrwifi` 命令；本插件只负责文字、链接和剪贴板内容。
 
 ## 安装
 
@@ -37,7 +37,7 @@ flowchart TD
 | 按键 | 动作 | 说明 |
 |---|---|---|
 | `Enter` | 复制图片 | 二维码图片写入剪贴板，结果行副标题更新「已复制」 |
-| `Ctrl+Enter` | 预览 | 置顶预览窗弹出后立即获取焦点，Esc 或点击窗外关闭 |
+| `Ctrl+Enter` | 预览 | 置顶预览窗弹出后立即获取焦点，聚焦时 Esc / Ctrl+D / Ctrl+W 关闭 |
 | `Shift+Enter` | 保存 PNG | 写入「图片」文件夹：`qr-日期-时间.png`，重名自动 +1 |
 | `→` | 全部动作 | 菜单列出以上三个动作 + 复制文本 / 复制名称 |
 
@@ -72,3 +72,8 @@ English code/comments per project convention; user-facing strings follow the hos
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+
+预览失焦后保留，内容区左键拖动、边框缩放、右键显示图片菜单；聚焦时 Esc、Ctrl+D、Ctrl+W 关闭，菜单打开时 Esc 先收起菜单。插件延迟启动，首次使用后常驻至宿主停止或禁用（`idleExitSec=0`）。发布与手动验证见 [WORKFLOWS.md](WORKFLOWS.md)。
+
+鼠标滚轮同步缩放二维码和预览窗口，始终保留完整二维码与留白；恢复默认大小可回到初始尺寸。

@@ -77,9 +77,6 @@ def main() -> int:
     if not (ROOT / "QrApp.dll").is_file():
         return fail("QrApp.dll missing; build the GUI library before packaging")
 
-    if not (ROOT / "QrApp.dll").is_file():
-        return fail("QrApp.dll missing; build the GUI library before packaging")
-
     files = sorted({*tracked_files(), program}
                    | ({"QrApp.dll"} if (ROOT / "QrApp.dll").is_file() else set()))
     if "plugin.json" not in files:

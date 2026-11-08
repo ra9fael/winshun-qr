@@ -15,8 +15,10 @@ namespace ra9fael::qr {
 // Lives on the GUI thread, created with the engine (QrPreview.cpp).
 class PreviewController : public QObject {
     Q_OBJECT
-    Q_PROPERTY(QString text READ text CONSTANT)
-    Q_PROPERTY(bool zh READ zh CONSTANT)
+    Q_PROPERTY(QString text READ text NOTIFY generationChanged)
+    Q_PROPERTY(bool zh READ zh NOTIFY generationChanged)
+    Q_PROPERTY(int modules READ modules NOTIFY generationChanged)
+    Q_PROPERTY(QString feedback READ feedback NOTIFY feedbackChanged)
     Q_PROPERTY(int generation READ generation NOTIFY generationChanged)
 
 public:
@@ -28,6 +30,8 @@ public:
     QString text() const { return m_text; }
     bool zh() const { return m_zh; }
     int generation() const { return m_generation; }
+    int modules() const { return m_modules; }
+    QString feedback() const { return m_feedback; }
     const Settings& settings() const { return m_settings; }
 
     void setText(const QString& text, bool zh, const Settings& settings)
@@ -35,20 +39,33 @@ public:
         m_text = text;
         m_zh = zh;
         m_settings = settings;
+        const auto code = encode(text.toStdString(), settings.ecc);
+        m_modules = code.size + settings.quietZone * 2;
+        m_feedback.clear();
+        emit feedbackChanged();
         ++m_generation;
         emit generationChanged();
     }
 
     Q_INVOKABLE void close() { emit closeRequested(); }
+    Q_INVOKABLE void copyImage();
+    Q_INVOKABLE void saveImage();
+    Q_INVOKABLE void restoreSize() { emit restoreRequested(); }
+    Q_INVOKABLE void zoom(double steps) { emit zoomRequested(steps); }
 
 signals:
     void generationChanged();
     void closeRequested();
+    void restoreRequested();
+    void zoomRequested(double steps);
+    void feedbackChanged();
 
 private:
     QString m_text;
     bool m_zh = true;
     int m_generation = 0;
+    int m_modules = 29;
+    QString m_feedback;
     Settings m_settings;
 };
 
