@@ -102,6 +102,10 @@ bool guiShow(const PreviewSpec& spec, const Settings& settings, std::string& err
     g_window = window;
     window->show();
     window->requestActivate(); // Esc and the click-outside need the focus
+    const HWND hwnd = reinterpret_cast<HWND>(window->winId());
+    SetForegroundWindow(hwnd);
+    SetActiveWindow(hwnd);
+    SetFocus(hwnd);
     winshun::debug("ra9fael.qr: preview shown, " + std::to_string(spec.text.size()) + " bytes");
     return true;
 }

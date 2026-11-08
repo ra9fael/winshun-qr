@@ -1,146 +1,106 @@
-# hostsim.py - drive the plugin the way the WinShun host does: pipes instead
-# of a console, WS_APP_DIR set, then the JSON-RPC sequence (initialize, query,
-# action). Reproduces crashes that the unit tests cannot, and reports the exit
-# code.
-#
-# Usage: python tools/verify/hostsim.py [noshow] [settings={"ecc":"H", ...}]
-#   default: query qr and qrwifi, copy the image, then preview (a window comes
-#   up; the script kills the plugin after 6 s). noshow skips the preview.
+"""Fixture-only JSON-RPC and preview focus regression check; noshow skips UI."""
+import ctypes as c
+from ctypes import wintypes as w
 import json
 import os
+from pathlib import Path
+import queue
 import subprocess
 import sys
 import threading
 import time
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-EXE = os.path.join(ROOT, "qr.exe")
-WS_DIR = os.environ.get("QR_WS_DIR", r"C:\Program Files\WinShun")
+ROOT = Path(__file__).resolve().parents[2]
+URL = 'https://example.com/hello'
+user32 = c.WinDLL('user32', use_last_error=True)
+user32.GetForegroundWindow.restype = w.HWND
+user32.GetWindowThreadProcessId.argtypes = [w.HWND, c.POINTER(w.DWORD)]
+user32.IsWindowVisible.argtypes = [w.HWND]
+user32.PostMessageW.argtypes = [w.HWND, w.UINT, w.WPARAM, w.LPARAM]
+user32.AllowSetForegroundWindow.argtypes = [w.DWORD]
 
-URL = "https://example.com/hello"
-PAYLOAD = "WIFI:T:WPA;S:MyNet;P:s3 cret;;"  # what qrwifi builds below
+class GUIInfo(c.Structure):
+    _fields_ = [('cbSize', w.DWORD), ('flags', w.DWORD), ('active', w.HWND),
+                ('focus', w.HWND), ('capture', w.HWND), ('menu', w.HWND),
+                ('move', w.HWND), ('caret', w.HWND), ('rect', w.RECT)]
 
+user32.GetGUIThreadInfo.argtypes = [w.DWORD, c.POINTER(GUIInfo)]
 
-def reader(pipe, tag, out):
-    for line in iter(pipe.readline, b""):
-        out.append(line)
-        print(f"[{tag}] {line.decode('utf-8', 'replace').rstrip()}")
+def windows(pid):
+    found = []
+    callback = c.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)
+    @callback
+    def visit(hwnd, _):
+        owner = w.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, c.byref(owner))
+        if owner.value == pid and user32.IsWindowVisible(hwnd):
+            found.append(hwnd)
+        return True
+    user32.EnumWindows(visit, 0)
+    return found
 
-
-def send(proc, obj):
-    text = json.dumps(obj, ensure_ascii=False)
-    print(f">>> {text}")
-    proc.stdin.write((text + "\n").encode("utf-8"))
-    proc.stdin.flush()
-
-
-def response_with_id(lines, want):
-    for line in list(lines):
-        try:
-            message = json.loads(line.decode("utf-8", "replace"))
-        except ValueError:
-            continue
-        if message.get("id") == want and "result" in message:
-            return message["result"]
-    return None
-
-
-def first_saved_row(lines, want):
-    """The first qrwifi row an action can run from, or None."""
-    result = response_with_id(lines, want)
-    if not result:
-        return None
-    for item in result.get("items", []):
-        if item.get("data", {}).get("wifi") and item.get("valid", True):
-            return item
-    return None
-
+def wait_for(fn, message):
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        result = fn()
+        if result:
+            return result
+        time.sleep(.04)
+    raise AssertionError(message)
 
 def main():
-    do_show = "noshow" not in sys.argv
-    settings = {"ecc": "M", "moduleSize": 8, "quietZone": 4,
-                "darkColor": "#000000", "lightColor": "#ffffff"}
-    for arg in sys.argv[1:]:
-        if arg.startswith("settings="):
-            settings = json.loads(arg.split("=", 1)[1])
-    env = dict(os.environ)
-    env["WS_APP_DIR"] = WS_DIR
-    proc = subprocess.Popen([EXE], env=env, cwd=ROOT,
-                            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE)
-    out, err = [], []
-    threading.Thread(target=reader, args=(proc.stdout, "out", out), daemon=True).start()
-    threading.Thread(target=reader, args=(proc.stderr, "err", err), daemon=True).start()
+    env = dict(os.environ, WS_APP_DIR=os.environ.get('QR_WS_DIR', r'C:\Program Files\WinShun'))
+    responses = queue.Queue()
+    errors = []
+    proc = subprocess.Popen([str(ROOT / 'qr.exe')], env=env, cwd=ROOT,
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    def read():
+        for line in iter(proc.stdout.readline, b''):
+            responses.put(json.loads(line))
+    threading.Thread(target=read, daemon=True).start()
+    threading.Thread(target=lambda: errors.extend(proc.stderr.read().decode('utf-8', 'replace').splitlines()), daemon=True).start()
+    seq = 0
+    def rpc(method, params):
+        nonlocal seq
+        seq += 1
+        proc.stdin.write((json.dumps({'jsonrpc': '2.0', 'id': seq, 'method': method, 'params': params}) + '\n').encode())
+        proc.stdin.flush()
+        while True:
+            message = responses.get(timeout=10)
+            if message.get('id') == seq:
+                assert 'error' not in message, message
+                return message['result']
+    try:
+        rpc('initialize', {'settings': {}, 'locale': 'zh-CN', 'theme': 'light', 'pluginDir': str(ROOT)})
+        row = rpc('query', {'command': 'qr', 'text': URL, 'limit': 20})['items'][0]
+        assert row['data']['payload'] == URL
+        assert rpc('query', {'command': 'qrwifi', 'text': ''})['items'] == []
+        old_action = rpc('action', {'command': 'qrwifi', 'action': 'copyImage', 'item': row})
+        assert not old_action.get('effects'), old_action
+        copied = rpc('action', {'command': 'qr', 'action': 'copyImage', 'item': row})
+        assert copied.get('effects'), copied
+        assert user32.IsClipboardFormatAvailable(8)
+        if 'noshow' not in sys.argv:
+            for _ in range(3):
+                user32.AllowSetForegroundWindow(proc.pid)
+                rpc('action', {'command': 'qr', 'action': 'preview', 'item': row})
+                hwnd = wait_for(lambda: windows(proc.pid), 'preview never appeared')[0]
+                wait_for(lambda: user32.GetForegroundWindow() == hwnd, 'preview did not take foreground')
+                info = GUIInfo(cbSize=c.sizeof(GUIInfo))
+                thread = user32.GetWindowThreadProcessId(hwnd, None)
+                assert user32.GetGUIThreadInfo(thread, c.byref(info)) and info.focus == hwnd, 'preview has no keyboard focus'
+                user32.PostMessageW(hwnd, 0x100, 0x1b, 0)
+                wait_for(lambda: not windows(proc.pid), 'Escape did not close preview')
+        print('PASS: text QR, removed command/action, clipboard, preview foreground/focus/Esc (UI unless noshow)')
+    finally:
+        proc.stdin.close()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        if errors:
+            print('\n'.join(errors[-8:]))
 
-    send(proc, {"id": 1, "method": "initialize", "params": {
-        "settings": settings, "locale": "zh-CN", "theme": "light",
-        "pluginDir": ROOT, "dataDir": os.path.join(os.environ["LOCALAPPDATA"], "WinShun")}})
-    time.sleep(1.0)
-    # qr with text; qrwifi (SSIDs and passwords get escaped); qr empty (the
-    # clipboard decides); qrwifi with no SSID (the hint row).
-    send(proc, {"id": 2, "method": "query", "params": {
-        "queryId": 1, "command": "qr", "trigger": "", "keyword": "qr",
-        "text": URL, "raw": "qr " + URL, "limit": 200, "match": []}})
-    send(proc, {"id": 3, "method": "query", "params": {
-        "queryId": 2, "command": "qrwifi", "trigger": "", "keyword": "qrwifi",
-        "text": "MyNet s3; cret", "raw": "qrwifi MyNet s3; cret", "limit": 200, "match": []}})
-    send(proc, {"id": 4, "method": "query", "params": {
-        "queryId": 3, "command": "qr", "trigger": "", "keyword": "qr",
-        "text": "", "raw": "qr ", "limit": 200, "match": []}})
-    send(proc, {"id": 5, "method": "query", "params": {
-        "queryId": 4, "command": "qrwifi", "trigger": "", "keyword": "qrwifi",
-        "text": "", "raw": "qrwifi", "limit": 200, "match": []}})
-    time.sleep(0.5)
-    # The filter path: only the matching saved network survives.
-    send(proc, {"id": 9, "method": "query", "params": {
-        "queryId": 5, "command": "qrwifi", "trigger": "", "keyword": "qrwifi",
-        "text": "imp", "raw": "qrwifi imp", "limit": 200, "match": []}})
-    time.sleep(0.5)
-
-    # The host dedupes rows by item id (Merge.cpp: first of an id wins), so a
-    # shared id would collapse the list to its first row. Guard that here.
-    result = response_with_id(out, 5)
-    ids = [item.get("id") for item in (result or {}).get("items", [])
-           if item.get("data", {}).get("wifi")]
-    print(f"saved-network ids: {ids}")
-    if len(ids) != len(set(ids)):
-        print("FAIL: duplicate item ids — the host would drop rows")
-
-    # A saved network row: Enter on it. The row carries only the SSID, so this
-    # is what proves the passphrase is read again rather than carried in the
-    # item. The row chosen is the first one an action can run from.
-    saved = first_saved_row(out, 5)
-    if saved is None:
-        print("no saved Wi-Fi network row: the action path is not exercised")
-    else:
-        print(f"saved network row: {saved['title']} ({saved['subtitle']})")
-        send(proc, {"id": 8, "method": "action", "params": {
-            "command": "qrwifi", "action": "copyImage", "text": "",
-            "item": saved}})
-        time.sleep(0.5)
-
-    # Enter: the image goes to the clipboard, the row says so. Then the
-    # preview window (if do_show).
-    send(proc, {"id": 6, "method": "action", "params": {
-        "command": "qr", "action": "copyImage", "text": URL,
-        "item": {"id": "code", "data": {"payload": URL, "command": "qr", "text": URL}}}})
-    time.sleep(0.5)
-    if do_show:
-        send(proc, {"id": 7, "method": "action", "params": {
-            "command": "qr", "action": "preview", "text": URL,
-            "item": {"id": "code", "data": {"payload": URL, "command": "qr", "text": URL}}}})
-        time.sleep(6.0)  # the preview stays up: kill afterwards
-
-    if proc.poll() is None:
-        print("alive after the sequence, killing (the preview must be gone)")
-        proc.kill()
-    code = proc.wait()
-    print(f"exit: {code} ({hex(code & 0xFFFFFFFF)})")
-    time.sleep(0.2)
-    # 0: clean exit; 1: what Popen.kill() reports on Windows (TerminateProcess
-    # with code 1); 0x40010004: the console killed variant.
-    return 0 if (code & 0xFFFFFFFF) in (0, 1, 0x40010004) else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+if __name__ == '__main__':
+    main()

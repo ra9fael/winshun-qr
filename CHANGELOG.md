@@ -4,6 +4,11 @@
 
 All notable changes to ra9fael.qr. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.0] - 2026-11-09
+
+- 删除 `qrwifi` 命令和所有 WLAN 配置/密码读取逻辑，Wi-Fi 二维码统一由 ra9fael.wifi 提供。
+- 保留 qr 的文字、链接、剪贴板生成与复制/预览/保存动作；预览弹出时显式激活并获取键盘焦点。
+
 ## [0.1.1] - 2026-11-09
 
 ### Fixed

@@ -43,8 +43,7 @@ qt_add_library(QrApp SHARED
 )
 target_compile_definitions(QrApp PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_include_directories(QrApp PRIVATE "${CMAKE_SOURCE_DIR}")
-# wlanapi: qrwifi lists the Wi-Fi networks this machine has joined (native.h).
-target_link_libraries(QrApp PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick wlanapi)
+target_link_libraries(QrApp PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)
 # Beside qr.exe, which loads it from its own folder (a Windows DLL is a
 # runtime artifact, hence RUNTIME_OUTPUT_DIRECTORY).
 set_target_properties(QrApp PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -95,20 +94,6 @@ endforeach()
 
 enable_testing()
 add_test(NAME qr_tests COMMAND qr_tests)
-
-# Generated app.ico frames, also embedded in the GUI binary.
-qt_add_resources(QrApp "plugin_window_icon"
-    PREFIX /plugin-icons BASE "${CMAKE_CURRENT_SOURCE_DIR}/icons"
-    FILES
-        icons/app-16.png
-        icons/app-20.png
-        icons/app-24.png
-        icons/app-32.png
-        icons/app-40.png
-        icons/app-48.png
-        icons/app-64.png
-        icons/app-256.png
-)
 
 # Generated app.ico frames, also embedded in the GUI binary.
 qt_add_resources(QrApp "plugin_window_icon"

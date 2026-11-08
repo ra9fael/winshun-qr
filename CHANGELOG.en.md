@@ -5,6 +5,11 @@
 ## [Unreleased]
 
 
+## [0.2.0] - 2026-11-09
+
+- Remove the qrwifi command and WLAN/profile/password handling. Wi-Fi QR sharing now belongs to ra9fael.wifi.
+- Keep text/link/clipboard QR generation, copying, preview and PNG saving. Explicitly activate and focus the preview when it opens.
+
 ## [0.1.1] - 2026-11-09
 
 ### Fixed
