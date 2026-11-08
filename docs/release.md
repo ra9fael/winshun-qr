@@ -13,14 +13,9 @@ cmake --build build
 
 ## 打包（.wsplugin）
 
-1. 确认 `plugin.json` 的 `version` 与发布 tag 一致
-2. `dist/ra9fael.qr-<ver>.wsplugin` = zip，包含且仅包含：
-   - `plugin.json`
-   - `qr.exe`
-   - `QrApp.dll`
-   - `README.md`
-   - `LICENSE`
-3. 计算 SHA-256：`Get-FileHash dist\ra9fael.qr-<ver>.wsplugin`
+1. 确认 `plugin.json` 的 `version` 与发布 tag 一致（可用 `python tools/package.py --tag v<ver>` 强校验）
+2. `python tools/package.py` 生成 `dist/ra9fael.qr-<ver>.wsplugin`（zip）：包含**所有 git 跟踪的文件**（源码、文档、许可证——投稿 unreviewed-native 要求包里带源码），外加构建产物 `qr.exe` 与 `QrApp.dll`（未入库）；`tools/verify/` 与点开头的文件（`.github` 等）不收。zip 是确定性的（文件名排序、固定时间戳、仅存储不压缩），同样输入必得同样 sha256
+3. SHA-256 由打包脚本算好写在 `dist/<包名>.sha256`，也会追加到 `dist/release-notes.md`（取自 CHANGELOG 里对应的版本小节）；也可用 `Get-FileHash dist\ra9fael.qr-<ver>.wsplugin` 复核
 
 ## 发布
 
