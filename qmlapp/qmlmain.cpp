@@ -1,27 +1,13 @@
-// qmlmain.cpp - the entries of QrApp.dll.
-//
-// winshunQrMain: the plugin itself, as WinShun starts it. Qt goes up on this
-// (the GUI) thread; the plugin protocol (winshun.h serve(), the query and
-// action mapping in main.cpp) runs on a worker thread and marshals its
-// preview and clipboard work here (qmlapp/QrPreview.cpp). The preview window
-// is built on demand and destroyed on demand — nothing is precreated.
-//
-// winshunQrPreview: `qr.exe --preview (--text <text> | --clipboard) [--en]
-// [--app-dir <folder>]` opens the preview directly, no WinShun and no
-// protocol — how the window is checked. It ends when the window closes.
-//
-// The runtime setup follows WinShun's shared-Qt contract (plugin.json declares
-// runtime.qt = "host"): the host sets WS_QT_DIR, the starter passes that
-// folder here, and Qt's library paths point there. The preview renders on the
-// software rasterizer (see startGui), as WinShun's own windows do.
-
+// Entries of QrApp.dll. Qt Core/Gui own application and clipboard services;
+// the protocol and native preview use separate threads. The standalone
+// --preview entry exits when its native window closes.
 #include "QrPreview.h"
 
 #include "../winshun.h"
 
 #include <QGuiApplication>
 #include "../qt_window_icon.h"
-#include <QQuickWindow>
+#include <QTimer>
 
 #include <windows.h>
 #include <shellapi.h>
@@ -47,8 +33,6 @@ void startGui()
 {
     qunsetenv("QT_QPA_PLATFORM");
     setPluginWindowIcon();
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
-    QQuickWindow::setTextRenderType(QQuickWindow::NativeTextRendering);
 }
 
 } // namespace
@@ -123,5 +107,10 @@ extern "C" __declspec(dllexport) int winshunQrPreview(const wchar_t* appDirName)
         std::fflush(stderr);
         return 2;
     }
+    QTimer lifetime;
+    QObject::connect(&lifetime, &QTimer::timeout, &app, [&] {
+        if (!ra9fael::qr::previewIsOpen()) app.quit();
+    });
+    lifetime.start(50);
     return app.exec();
 }
