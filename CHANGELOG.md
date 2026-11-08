@@ -1,6 +1,19 @@
 # Changelog
 
+[English](CHANGELOG.en.md)
+
 All notable changes to ra9fael.qr. Format follows [Keep a Changelog](https://keepachangelog.com/).
+
+## [0.1.1] - 2026-11-09
+
+### Fixed
+
+- 修复可执行文件图标，补齐打包中的 ICO 和资源脚本。 在 Qt 界面库中嵌入多尺寸 PNG 并设置应用图标；打包缺少界面 DLL 时拒绝生成。
+
+### Notes
+
+- 本次仅生成本地标签与安装包。实际验证范围见 docs/icon-validation.md；未进行 GitHub 发布。更新后需重新启动插件进程。
+
 
 ## [0.1.0] - 2026-11-08
 

@@ -3,7 +3,7 @@
   "manifest": 1,
   "id": "ra9fael.qr",
   "name": {"zh": "二维码", "en": "QR code"},
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": {
     "zh": "文字、链接或剪贴板内容生成二维码：Enter 复制图片，Ctrl+Enter 预览，Shift+Enter 存 PNG；qrwifi 直接列出连接过的 Wi-Fi 生成扫码即连的二维码",
     "en": "Turn text, a link or the clipboard into a QR code: Enter copies the image, Ctrl+Enter previews, Shift+Enter saves a PNG; qrwifi lists the Wi-Fi networks you have joined and builds a scan-to-join code"

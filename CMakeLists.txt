@@ -15,7 +15,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
 # The QML module's resources under :/qt/qml/<URI>, as WinShun's own app does.
 qt_policy(SET QTP0001 NEW)
 
-add_executable(qr qmlapp/stub/main.cpp)
+add_executable(qr qmlapp/stub/main.cpp qr.rc)
 target_compile_definitions(qr PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 # Beside QrApp.dll, where plugin.json's runtime.program points.
 set_target_properties(qr PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -95,3 +95,31 @@ endforeach()
 
 enable_testing()
 add_test(NAME qr_tests COMMAND qr_tests)
+
+# Generated app.ico frames, also embedded in the GUI binary.
+qt_add_resources(QrApp "plugin_window_icon"
+    PREFIX /plugin-icons BASE "${CMAKE_CURRENT_SOURCE_DIR}/icons"
+    FILES
+        icons/app-16.png
+        icons/app-20.png
+        icons/app-24.png
+        icons/app-32.png
+        icons/app-40.png
+        icons/app-48.png
+        icons/app-64.png
+        icons/app-256.png
+)
+
+# Generated app.ico frames, also embedded in the GUI binary.
+qt_add_resources(QrApp "plugin_window_icon"
+    PREFIX /plugin-icons BASE "${CMAKE_CURRENT_SOURCE_DIR}/icons"
+    FILES
+        icons/app-16.png
+        icons/app-20.png
+        icons/app-24.png
+        icons/app-32.png
+        icons/app-40.png
+        icons/app-48.png
+        icons/app-64.png
+        icons/app-256.png
+)
