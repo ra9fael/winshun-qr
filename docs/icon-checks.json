@@ -1,0 +1,116 @@
+{
+  "name": "qr",
+  "exe_sha256": "89c987a883d6a1f0b1de67df793a4b5697e33414612a7080f49468967cbbb557",
+  "checks": [
+    {
+      "name": "Executable resources load",
+      "passed": true
+    },
+    {
+      "name": "Named icon group exists",
+      "passed": true,
+      "detail": [
+        "IDI_ICON1"
+      ]
+    },
+    {
+      "name": "Eight icon frames exist",
+      "passed": true,
+      "detail": 8
+    },
+    {
+      "name": "Embedded 16px icon loads",
+      "passed": true
+    },
+    {
+      "name": "Embedded 20px icon loads",
+      "passed": true
+    },
+    {
+      "name": "Embedded 24px icon loads",
+      "passed": true
+    },
+    {
+      "name": "Embedded 32px icon loads",
+      "passed": true
+    },
+    {
+      "name": "Embedded 40px icon loads",
+      "passed": true
+    },
+    {
+      "name": "Embedded 48px icon loads",
+      "passed": true
+    },
+    {
+      "name": "Embedded 64px icon loads",
+      "passed": true
+    },
+    {
+      "name": "Embedded 256px icon loads",
+      "passed": true
+    },
+    {
+      "name": "initialize returns a result",
+      "passed": true
+    },
+    {
+      "name": "Plugin initializes",
+      "passed": true,
+      "detail": "ra9fael.qr"
+    },
+    {
+      "name": "query returns a result",
+      "passed": true
+    },
+    {
+      "name": "action returns a result",
+      "passed": true
+    },
+    {
+      "name": "QR: Qt icon 1 assigned",
+      "passed": true
+    },
+    {
+      "name": "QR: Qt icon 1 dimensions",
+      "passed": true
+    },
+    {
+      "name": "QR: Qt icon 1 pixels",
+      "passed": true,
+      "detail": {
+        "max_difference": 1
+      }
+    },
+    {
+      "name": "QR: Qt icon 0 assigned",
+      "passed": true
+    },
+    {
+      "name": "QR: Qt icon 0 dimensions",
+      "passed": true
+    },
+    {
+      "name": "QR: Qt icon 0 pixels",
+      "passed": true,
+      "detail": {
+        "max_difference": 1
+      }
+    },
+    {
+      "name": "Tool window stays outside taskbar",
+      "passed": true
+    },
+    {
+      "name": "shutdown returns a result",
+      "passed": true
+    },
+    {
+      "name": "Plugin shuts down cleanly",
+      "passed": true,
+      "detail": 0
+    }
+  ],
+  "input": "Directed messages to owned plugin processes",
+  "passed": true
+}
