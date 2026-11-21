@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-22
+
+### Added
+
+- The close button reddens under the mouse, its cross turning white, and dulls again when the mouse leaves, like a window's own close button.
+
 ## [0.2.3] - 2026-11-22
 
 ### Changed

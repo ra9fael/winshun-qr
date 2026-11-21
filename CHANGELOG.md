@@ -6,6 +6,12 @@ All notable changes to ra9fael.qr. Format follows [Keep a Changelog](https://kee
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-22
+
+### Added
+
+- 鼠标悬停在关闭按钮上时按钮变红、叉号转白，移开后恢复，与系统窗口一致。
+
 ## [0.2.3] - 2026-11-22
 
 ### Changed
