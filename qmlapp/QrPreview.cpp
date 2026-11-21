@@ -9,10 +9,52 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QThread>
+#include <QTimer>
+
+#include <memory>
+#include <mutex>
+#include <vector>
 
 namespace ra9fael::qr {
 namespace {
-qrpreview::QrPreview g_preview;
+// One preview per action: a new one is a new window, and the earlier ones stay
+// open. Each window closes on its own thread, so the list is swept when they do.
+std::mutex g_mutex;
+std::vector<std::unique_ptr<qrpreview::QrPreview>> g_previews;
+QTimer* g_reaper = nullptr; // the GUI thread only
+
+// Joins what ended and frees what it held. True while a window is still up.
+bool sweepPreviews()
+{
+    std::lock_guard lock(g_mutex);
+    g_previews.erase(std::remove_if(g_previews.begin(), g_previews.end(),
+                         [](const std::unique_ptr<qrpreview::QrPreview>& preview) {
+                             return preview->window() == nullptr;
+                         }),
+        g_previews.end());
+    return !g_previews.empty();
+}
+
+// The RPC thread has no further call to come after a window closes itself, and
+// the GUI thread is idle then: its timer does the sweeping while previews exist.
+void ensureReaper()
+{
+    QMetaObject::invokeMethod(
+        qGuiApp,
+        [] {
+            if (!g_reaper) {
+                g_reaper = new QTimer(qGuiApp);
+                g_reaper->setInterval(500);
+                QObject::connect(g_reaper, &QTimer::timeout, qGuiApp, [] {
+                    if (!sweepPreviews())
+                        g_reaper->stop();
+                });
+            }
+            if (!g_reaper->isActive())
+                g_reaper->start();
+        },
+        Qt::QueuedConnection);
+}
 
 bool guiPutImage(const Bitmap& bmp)
 {
@@ -30,14 +72,29 @@ bool showPreview(const PreviewSpec& spec, const Settings& settings, std::string&
     if (!code.ok) { error = "Failed to encode preview"; return false; }
     const auto image = renderImage(code, settings);
     qrpreview::Bitmap snapshot {image.width, image.pixels, code.size + 2 * settings.quietZone};
-    if (!g_preview.show(std::move(snapshot), spec.text, spec.zh, L"QR", L"qr")) {
+    auto preview = std::make_unique<qrpreview::QrPreview>();
+    if (!preview->show(std::move(snapshot), spec.text, spec.zh, L"QR", L"qr")) {
         error = "Failed to open preview";
         return false;
     }
+    {
+        std::lock_guard lock(g_mutex);
+        g_previews.push_back(std::move(preview));
+    }
+    ensureReaper();
     return true;
 }
-void closePreview() { g_preview.close(); }
-bool previewIsOpen() { return g_preview.window() != nullptr; }
+void closePreview()
+{
+    std::vector<std::unique_ptr<qrpreview::QrPreview>> closing;
+    {
+        std::lock_guard lock(g_mutex);
+        closing.swap(g_previews);
+    }
+    for (auto& preview : closing)
+        preview->close();
+}
+bool previewIsOpen() { return sweepPreviews(); }
 
 std::string clipboardText()
 {

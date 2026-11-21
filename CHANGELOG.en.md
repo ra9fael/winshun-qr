@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-22
+
+### Changed
+
+- Each preview now opens its own window: the ones already open stay, and each closes on its own, instead of the new one replacing the old. A new window opens beside the newest one; with none open, the last place and size are kept.
+
+## [0.2.2] - 2026-11-22
+
+### Fixed
+
+- A preview opened from a result's right-click menu no longer stays behind other programs: besides the foreground right the host grants, the window goes on asking for the foreground for a moment after it appears, and takes it back once when the launcher hides and hands it to the program it covered.
+- The preview no longer turns black after a session unlock, a resume, the display coming back or a composition restart: it repaints on those and every five seconds as the last resort.
 
 ## [0.2.1] - 2026-11-09
 

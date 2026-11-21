@@ -41,7 +41,7 @@ qt_add_library(QrApp SHARED
 )
 target_compile_definitions(QrApp PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_include_directories(QrApp PRIVATE "${CMAKE_SOURCE_DIR}")
-target_link_libraries(QrApp PRIVATE Qt6::Core Qt6::Gui user32 gdi32 gdiplus ole32)
+target_link_libraries(QrApp PRIVATE Qt6::Core Qt6::Gui user32 gdi32 gdiplus ole32 wtsapi32)
 # Beside qr.exe, which loads it from its own folder (a Windows DLL is a
 # runtime artifact, hence RUNTIME_OUTPUT_DIRECTORY).
 set_target_properties(QrApp PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}")

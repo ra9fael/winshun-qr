@@ -6,7 +6,7 @@
     "zh": "二维码",
     "en": "QR code"
   },
-  "version": "0.2.1",
+  "version": "0.2.3",
   "description": {
     "zh": "文字、链接或剪贴板内容生成二维码：Enter 复制图片，Ctrl+Enter 预览，Shift+Enter 存 PNG",
     "en": "Turn text, a link or the clipboard into a QR code: Enter copies the image, Ctrl+Enter previews, Shift+Enter saves a PNG"
@@ -47,6 +47,7 @@
         "zh": "二维码",
         "en": "QR code"
       },
+      "icon": "glyph:U+ED14",
       "hint": {
         "zh": "输入文字或链接；留空用剪贴板",
         "en": "text or a link; empty uses the clipboard"

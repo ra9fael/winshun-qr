@@ -14,7 +14,8 @@ struct PreviewSpec {
     bool zh = true;
 };
 
-// Show one native preview, preserving session geometry when replacing it.
+// Show one native preview per call; earlier previews stay open, and a new
+// window opens beside the newest one.
 bool showPreview(const PreviewSpec& spec, const Settings& settings, std::string& error);
 
 // Closes and destroys the preview window, if any. Safe from any thread.

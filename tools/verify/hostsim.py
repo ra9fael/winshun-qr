@@ -18,6 +18,7 @@ user32.GetWindowThreadProcessId.argtypes = [w.HWND, c.POINTER(w.DWORD)]
 user32.IsWindowVisible.argtypes = [w.HWND]
 user32.PostMessageW.argtypes = [w.HWND, w.UINT, w.WPARAM, w.LPARAM]
 user32.AllowSetForegroundWindow.argtypes = [w.DWORD]
+user32.GetWindowRect.argtypes = [w.HWND, c.POINTER(w.RECT)]
 
 class GUIInfo(c.Structure):
     _fields_ = [('cbSize', w.DWORD), ('flags', w.DWORD), ('active', w.HWND),
@@ -81,17 +82,38 @@ def main():
         assert copied.get('effects'), copied
         assert user32.IsClipboardFormatAvailable(8)
         if 'noshow' not in sys.argv:
-            for _ in range(3):
-                user32.AllowSetForegroundWindow(proc.pid)
-                rpc('action', {'command': 'qr', 'action': 'preview', 'item': row})
-                hwnd = wait_for(lambda: windows(proc.pid), 'preview never appeared')[0]
-                wait_for(lambda: user32.GetForegroundWindow() == hwnd, 'preview did not take foreground')
-                info = GUIInfo(cbSize=c.sizeof(GUIInfo))
-                thread = user32.GetWindowThreadProcessId(hwnd, None)
-                assert user32.GetGUIThreadInfo(thread, c.byref(info)) and info.focus == hwnd, 'preview has no keyboard focus'
-                user32.PostMessageW(hwnd, 0x100, 0x1b, 0)
-                wait_for(lambda: not windows(proc.pid), 'Escape did not close preview')
-        print('PASS: text QR, removed command/action, clipboard, preview foreground/focus/Esc (UI unless noshow)')
+            # One preview per action: the first stays open while the second
+            # appears beside it, and each closes on its own Escape.
+            user32.AllowSetForegroundWindow(proc.pid)
+            rpc('action', {'command': 'qr', 'action': 'preview', 'item': row})
+            first = wait_for(lambda: windows(proc.pid), 'preview never appeared')[0]
+            wait_for(lambda: user32.GetForegroundWindow() == first, 'preview did not take foreground')
+            info = GUIInfo(cbSize=c.sizeof(GUIInfo))
+            thread = user32.GetWindowThreadProcessId(first, None)
+            assert user32.GetGUIThreadInfo(thread, c.byref(info)) and info.focus == first, 'preview has no keyboard focus'
+            user32.AllowSetForegroundWindow(proc.pid)
+            rpc('action', {'command': 'qr', 'action': 'preview', 'item': row})
+            second = wait_for(lambda: next((h for h in windows(proc.pid) if h != first), None),
+                              'second preview never appeared')
+            wait_for(lambda: user32.GetForegroundWindow() == second, 'second preview did not take foreground')
+
+            def rect_of(hwnd):
+                r = w.RECT()
+                user32.GetWindowRect(hwnd, c.byref(r))
+                return (r.left, r.top)
+
+            assert rect_of(first) != rect_of(second), 'windows landed exactly on top of each other'
+            user32.PostMessageW(second, 0x100, 0x1b, 0)
+            wait_for(lambda: second not in windows(proc.pid), 'Escape did not close the second preview')
+            assert first in windows(proc.pid), 'the first preview was closed too'
+            user32.PostMessageW(first, 0x100, 0x1b, 0)
+            wait_for(lambda: not windows(proc.pid), 'Escape did not close the last preview')
+            user32.AllowSetForegroundWindow(proc.pid)
+            rpc('action', {'command': 'qr', 'action': 'preview', 'item': row})
+            again = wait_for(lambda: windows(proc.pid), 'reopened preview never appeared')
+            user32.PostMessageW(again[0], 0x100, 0x1b, 0)
+            wait_for(lambda: not windows(proc.pid), 'reopened preview did not close')
+        print('PASS: text QR, removed command/action, clipboard, two coexisting previews, foreground/focus/Esc')
     finally:
         proc.stdin.close()
         try:
